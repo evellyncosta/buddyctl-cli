@@ -5,7 +5,7 @@ CLI tool for managing StackSpot AI assistants (buddies).
 ## Prerequisites
 
 - Python 3.8 or higher
-- pip (Python package manager)
+- Poetry (Python dependency manager)
 
 ## Installation
 
@@ -15,29 +15,27 @@ git clone <repository-url>
 cd buddyctl
 ```
 
-2. Create and activate a virtual environment:
-
-**Linux/macOS:**
+2. Install Poetry (if you haven't already):
 ```bash
-python3 -m venv venv
-source venv/bin/activate
+curl -sSL https://install.python-poetry.org | python3 -
 ```
 
-**Windows:**
+3. Install the project dependencies:
 ```bash
-python -m venv venv
-venv\Scripts\activate
+poetry install
 ```
 
-3. Install the project with dependencies:
-```bash
-pip install -e .
-```
+This will:
+- Create a virtual environment automatically
+- Install all dependencies from `pyproject.toml`
+- Install the project in editable mode
+- Generate `poetry.lock` for reproducible builds
 
-This will install the project in editable mode using the configuration from `pyproject.toml`, including all dependencies:
+**Dependencies installed:**
 - typer[all] - CLI framework
 - httpx - HTTP client
 - prompt_toolkit - Interactive prompts
+- langchain - LLM framework integration
 
 ## Configuration
 
@@ -57,22 +55,245 @@ You can generate these credentials in your StackSpot account.
 
 ## Running the Project
 
-After installation and configuration, run the CLI tool:
+After installation and configuration, run the CLI tool using Poetry:
 
 ```bash
-buddyctl
+# Run the interactive shell
+poetry run buddyctl
+
+# Or use specific commands
+poetry run buddyctl auth status
+poetry run buddyctl auth login
+poetry run buddyctl agent-default <agent_id>
+poetry run buddyctl --help
 ```
 
-Or directly with Python:
+### Optional: Create an alias for easier access
+
+Add to your `~/.bashrc` or `~/.zshrc`:
 ```bash
-python -m buddyctl.main
+alias buddyctl='poetry run buddyctl'
+```
+
+Then reload your shell:
+```bash
+source ~/.bashrc  # or source ~/.zshrc
+```
+
+Now you can use directly:
+```bash
+buddyctl
+buddyctl auth status
+buddyctl --help
+```
+
+## Features
+
+- 🔐 OAuth2 authentication with StackSpot
+- 🤖 Agent management and configuration
+- 💬 Interactive chat with streaming responses
+- 📁 File autocompletion with @ navigation
+- 🔍 Real-time file indexing and suggestions
+- 📝 Command history and auto-suggestions
+
+## Usage Examples
+
+### Authentication
+```bash
+# Login with your credentials
+poetry run buddyctl auth login
+
+# Check authentication status
+poetry run buddyctl auth status
+
+# Logout
+poetry run buddyctl auth logout
+```
+
+### Setting Default Agent
+```bash
+# Set the default agent for conversations
+poetry run buddyctl agent-default <your-agent-id>
+```
+
+### Interactive Shell
+```bash
+# Start the interactive shell
+poetry run buddyctl
+
+# Inside the shell:
+/help              # Show available commands
+/status            # Check auth and agent status
+/agent-default <id> # Set default agent
+/clear             # Clear screen
+/exit              # Exit shell
+
+# Chat with the agent (any message without /)
+Hello, how can you help me?
+
+# Reference files in your messages using @
+Can you review @src/main.py and suggest improvements?
 ```
 
 ## Development
 
-The project uses `pyproject.toml` for dependency management and package configuration. The editable installation (`pip install -e .`) allows you to make changes to the code and test them immediately without reinstalling.
+The project uses Poetry for dependency management and packaging.
 
-To deactivate the virtual environment when you're done:
+### Useful Poetry commands:
+
 ```bash
-deactivate
+# Add a new dependency
+poetry add package-name
+
+# Add a development dependency
+poetry add --group dev package-name
+
+# Update dependencies
+poetry update
+
+# Show installed packages
+poetry show
+
+# Show dependency tree
+poetry show --tree
+
+# Check for dependency issues
+poetry check
+
+# Run commands in the virtual environment
+poetry run <command>
+
+# Activate virtual environment (Poetry 2.0+)
+source $(poetry env info --path)/bin/activate
+
+# Or install the shell plugin for poetry shell command
+poetry self add poetry-plugin-shell
+poetry shell
 ```
+
+### Adding LangChain Integration
+
+```bash
+# Add LangChain core
+poetry add langchain
+
+# Add specific integrations
+poetry add langchain-openai      # For OpenAI/GPT models
+poetry add langchain-anthropic   # For Claude API
+poetry add langchain-community   # Community integrations
+
+# Verify installation
+poetry run python -c "import langchain; print(langchain.__version__)"
+```
+
+### Running tests and linters:
+
+```bash
+# If you add these dev dependencies:
+poetry add --group dev pytest black ruff
+
+# Run tests
+poetry run pytest
+
+# Format code
+poetry run black .
+
+# Lint code
+poetry run ruff check .
+```
+
+### Project Structure
+
+```
+buddyctl/
+├── buddyctl/
+│   ├── __init__.py
+│   ├── main.py              # CLI entry point
+│   ├── auth.py              # OAuth2 authentication
+│   ├── config.py            # Configuration management
+│   ├── chat_client.py       # Chat with SSE streaming
+│   ├── agent_validator.py   # Agent validation
+│   ├── api_client.py        # API client wrapper
+│   ├── interactive.py       # Interactive shell
+│   ├── file_indexer.py      # File indexing system
+│   ├── autosuggestion.py    # File autocompletion
+│   └── banner.py            # ASCII banner
+├── pyproject.toml           # Poetry configuration
+├── poetry.lock              # Lock file (version pinning)
+├── .env.example             # Environment template
+└── README.md                # This file
+```
+
+## Troubleshooting
+
+### Command not found: buddyctl
+Make sure you're using `poetry run buddyctl` or have created an alias.
+
+### Authentication fails
+- Verify your credentials in `.env` file
+- Check if CLIENT_ID, CLIENT_SECRET, and REALM are correct
+- Try: `poetry run buddyctl auth login`
+
+### Poetry command not found
+Install Poetry:
+```bash
+curl -sSL https://install.python-poetry.org | python3 -
+```
+
+### Dependency conflicts
+```bash
+# Clear cache and reinstall
+poetry cache clear pypi --all
+poetry install
+```
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Run tests and linters
+5. Submit a pull request
+
+## License
+
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+
+This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
+
+### What does this mean?
+
+**You can:**
+- ✅ Use this software for any purpose (commercial or personal)
+- ✅ Modify the source code
+- ✅ Distribute original or modified versions
+- ✅ Sublicense (include it in your own projects)
+- ✅ Use it in proprietary software
+
+**You must:**
+- 📝 Include the original copyright notice
+- 📝 Include the LICENSE file
+- 📝 State significant changes made to the code
+- 📝 Include the NOTICE file (if present)
+
+**Protection:**
+- 🛡️ **Patent Grant**: Contributors grant you patent rights for their contributions
+- 🛡️ **Patent Retaliation**: If you sue for patent infringement, your license terminates
+- 🛡️ **No Trademark Rights**: You can't use project trademarks without permission
+
+### Why Apache 2.0?
+
+We chose Apache 2.0 because it:
+- Encourages both open source and commercial adoption
+- Provides explicit patent protection
+- Is compatible with most other open source licenses
+- Is trusted by major organizations and developers worldwide
+
+### Third-Party Licenses
+
+This project uses the following open source libraries:
+- [typer](https://github.com/tiangolo/typer) - BSD-3-Clause
+- [httpx](https://github.com/encode/httpx) - BSD-3-Clause
+- [prompt_toolkit](https://github.com/prompt-toolkit/python-prompt-toolkit) - BSD-3-Clause
+
+All third-party libraries maintain their original licenses.

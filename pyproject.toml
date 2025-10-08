@@ -1,9 +1,29 @@
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
 [tool.poetry]
 name = "buddyctl"
 version = "0.1.0"
 description = "CLI tool for managing StackSpot AI assistants (buddies)"
-authors = ["Evellyn <seu@email.com>"]
+authors = ["Evellyn"]
+license = "Apache-2.0"
 readme = "README.md"
+homepage = "https://github.com/yourusername/buddyctl"
+repository = "https://github.com/yourusername/buddyctl"
+keywords = ["cli", "stackspot", "ai", "assistant", "chat"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
 packages = [{include = "buddyctl"}]
 
 [tool.poetry.dependencies]
@@ -14,12 +34,32 @@ prompt-toolkit = "^3.0.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.4.0"
+pytest-cov = "^4.1.0"
+pytest-mock = "^3.12.0"
 black = "^23.0.0"
 ruff = "^0.1.0"
+mypy = "^1.7.0"
 
 [tool.poetry.scripts]
 buddyctl = "buddyctl.main:app"
 
-[build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+[tool.black]
+line-length = 100
+target-version = ['py38', 'py39', 'py310', 'py311']
+
+[tool.ruff]
+line-length = 100
+target-version = "py38"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --cov=buddyctl --cov-report=term-missing"
+
+[tool.mypy]
+python_version = "3.8"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
