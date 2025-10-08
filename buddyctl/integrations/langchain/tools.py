@@ -15,31 +15,30 @@
 """Tools for LangChain integration."""
 
 from pathlib import Path
-from typing import Optional
 from langchain_core.tools import tool
 
 
 @tool
 def read_file(file_path: str) -> str:
     """Read content from a file.
-    
+
     This tool reads the complete content of a file and returns it as a string.
     It's used primarily to load source code files that will be analyzed or
     modified by StackSpot agents.
-    
+
     Args:
         file_path: Path to the file to read (relative or absolute).
                   Can be any text file (e.g., .py, .java, .kt, .go, .js)
-        
+
     Returns:
         File content as string, or error message if operation fails
-        
+
     Example:
         >>> result = read_file("src/main.py")
         >>> print(result)
         def main():
             print("Hello World")
-    
+
     Error Cases:
         - File not found: Returns "Error: File not found: {path}"
         - Not a file: Returns "Error: Path is not a file: {path}"
@@ -48,19 +47,19 @@ def read_file(file_path: str) -> str:
     """
     try:
         path = Path(file_path)
-        
+
         # Check if file exists
         if not path.exists():
             return f"Error: File not found: {file_path}"
-        
+
         # Check if path is actually a file (not a directory)
         if not path.is_file():
             return f"Error: Path is not a file: {file_path}"
-        
+
         # Read file content with UTF-8 encoding
-        content = path.read_text(encoding='utf-8')
+        content = path.read_text(encoding="utf-8")
         return content
-        
+
     except PermissionError:
         return f"Error: Permission denied reading: {file_path}"
     except UnicodeDecodeError:

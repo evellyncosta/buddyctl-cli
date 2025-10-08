@@ -5,7 +5,7 @@ from prompt_toolkit.completion import Completer, Completion
 from prompt_toolkit.document import Document
 
 from .file_indexer import FileIndexer
-from .autosuggestion import AutoSuggestionHandler
+from ..ui.autosuggestion import AutoSuggestionHandler
 
 
 class FileAutoCompleter(Completer):
@@ -66,12 +66,12 @@ class FileAutoCompleter(Completer):
             start_position = query_start_in_line - cursor_pos
 
             # Create display text with icon
-            icon = "📁" if suggestion['type'] == 'folder' else "📄"
+            icon = "📁" if suggestion["type"] == "folder" else "📄"
             display_text = f"{icon} {suggestion['display']}"
 
             # Create completion
             yield Completion(
-                text=suggestion['display'],
+                text=suggestion["display"],
                 start_position=start_position,
                 display=display_text,
             )
@@ -132,7 +132,9 @@ class EnhancedFileAutoCompleter(FileAutoCompleter):
 
         return False
 
-    def _get_enhanced_file_completions(self, document: Document, file_query_info) -> Iterable[Completion]:
+    def _get_enhanced_file_completions(
+        self, document: Document, file_query_info
+    ) -> Iterable[Completion]:
         """Get enhanced file completions with better formatting.
 
         Args:
@@ -151,14 +153,14 @@ class EnhancedFileAutoCompleter(FileAutoCompleter):
             start_position = query_start_in_line - cursor_pos
 
             # Create enhanced display with number and icon
-            icon = "📁" if suggestion['type'] == 'folder' else "📄"
-            type_color = "blue" if suggestion['type'] == 'folder' else "white"
+            icon = "📁" if suggestion["type"] == "folder" else "📄"
+            type_color = "blue" if suggestion["type"] == "folder" else "white"
 
             # Format display with number for easy selection
             display_text = f"{i}. {icon} {suggestion['display']}"
 
             yield Completion(
-                text=suggestion['display'],
+                text=suggestion["display"],
                 start_position=start_position,
                 display=display_text,
                 style=f"fg:{type_color}",

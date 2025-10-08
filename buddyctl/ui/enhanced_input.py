@@ -1,11 +1,9 @@
 """Enhanced input handler with real-time file autocompletion."""
 
-import sys
-from typing import Optional, Callable, List, Dict, Any
+from typing import List, Dict, Any
 from prompt_toolkit import PromptSession
 from prompt_toolkit.application import Application
 from prompt_toolkit.buffer import Buffer
-from prompt_toolkit.document import Document
 from prompt_toolkit.filters import Condition
 from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.keys import Keys
@@ -15,7 +13,7 @@ from prompt_toolkit.layout.layout import Layout
 from prompt_toolkit.shortcuts import print_formatted_text
 from prompt_toolkit.formatted_text import HTML
 
-from .file_indexer import FileIndexer
+from ..utils.file_indexer import FileIndexer
 from .autosuggestion import AutoSuggestionHandler
 from .visual_suggestions import VisualSuggestionDisplay
 
@@ -49,6 +47,7 @@ class EnhancedInteractiveInput:
 
         # Number selection (1-9)
         for i in range(1, 10):
+
             @bindings.add(str(i), filter=has_suggestions_condition)
             def _(event, number=i):
                 self._handle_number_selection(event, number)
@@ -187,15 +186,19 @@ class RealTimeAutoCompleteInput:
 
         suggestion_window = Window(
             content=suggestion_control,
-            height=lambda: min(len(self.current_suggestions) + 2, 8) if self.current_suggestions else 0,
+            height=lambda: min(len(self.current_suggestions) + 2, 8)
+            if self.current_suggestions
+            else 0,
             dont_extend_height=True,
         )
 
         layout = Layout(
-            HSplit([
-                input_window,
-                suggestion_window,
-            ])
+            HSplit(
+                [
+                    input_window,
+                    suggestion_window,
+                ]
+            )
         )
 
         # Create application
@@ -213,6 +216,7 @@ class RealTimeAutoCompleteInput:
 
         # Number selection
         for i in range(1, 10):
+
             @bindings.add(str(i))
             def _(event, number=i):
                 if self.current_suggestions and number <= len(self.current_suggestions):
@@ -254,9 +258,9 @@ class RealTimeAutoCompleteInput:
 
         lines = ["📁 File suggestions:"]
         for i, suggestion in enumerate(self.current_suggestions, 1):
-            icon = "📁" if suggestion['type'] == 'folder' else "📄"
-            name = suggestion['display']
-            color = "blue" if suggestion['type'] == 'folder' else "white"
+            icon = "📁" if suggestion["type"] == "folder" else "📄"
+            name = suggestion["display"]
+            color = "blue" if suggestion["type"] == "folder" else "white"
             lines.append(f"  {i}. {icon} {name}")
 
         lines.append("💡 Press TAB or 1-9 to select")

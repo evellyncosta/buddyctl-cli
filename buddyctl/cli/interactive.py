@@ -1,33 +1,31 @@
 """Interactive CLI shell for buddyctl."""
 
-import sys
-import os
-from typing import Dict, Callable, List, Optional, Any
-from prompt_toolkit import prompt, PromptSession
+from typing import Dict, Callable, List, Optional
+from prompt_toolkit import PromptSession
 from prompt_toolkit.completion import WordCompleter
 from prompt_toolkit.history import FileHistory
 from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
 from prompt_toolkit.shortcuts import print_formatted_text
 from prompt_toolkit.formatted_text import HTML
 from prompt_toolkit.key_binding import KeyBindings
-from prompt_toolkit.keys import Keys
 from pathlib import Path
 
-from .auth import StackSpotAuth, AuthenticationError
-from .config import BuddyConfig, ConfigurationError
+from ..core.auth import StackSpotAuth, AuthenticationError
+from ..core.config import BuddyConfig, ConfigurationError
 from .agent_validator import AgentValidator, AgentValidationError
-from .banner import display_banner
+from ..ui.banner import display_banner
 from .chat_client import ChatClient
-from .file_indexer import FileIndexer
-from .autosuggestion import AutoSuggestionHandler
-from .file_autocomplete import EnhancedFileAutoCompleter
-from .visual_suggestions import VisualSuggestionDisplay
+from ..utils.file_indexer import FileIndexer
+from ..ui.autosuggestion import AutoSuggestionHandler
+from ..utils.file_autocomplete import EnhancedFileAutoCompleter
+from ..ui.visual_suggestions import VisualSuggestionDisplay
+
 # Enhanced input module is available but not directly used in interactive shell
 
 
 class InteractiveShell:
     """Interactive shell for buddyctl commands."""
-    
+
     def __init__(self):
         self.auth = StackSpotAuth()
         self.config = BuddyConfig()
@@ -72,17 +70,29 @@ class InteractiveShell:
         try:
             success = self.file_indexer.build_index()
             if success:
-                print_formatted_text(HTML("<ansigreen>✨ File autocompletion enabled! Type @ to reference files</ansigreen>"))
+                print_formatted_text(
+                    HTML(
+                        "<ansigreen>✨ File autocompletion enabled! Type @ to reference files</ansigreen>"
+                    )
+                )
                 print_formatted_text(HTML("<ansigreen>   • Use TAB for autocompletion</ansigreen>"))
-                print_formatted_text(HTML("<ansigreen>   • Type @ followed by filename or path</ansigreen>"))
+                print_formatted_text(
+                    HTML("<ansigreen>   • Type @ followed by filename or path</ansigreen>")
+                )
             else:
-                print_formatted_text(HTML("<ansiyellow>⚠️ File indexing failed - file autocompletion may be limited</ansiyellow>"))
+                print_formatted_text(
+                    HTML(
+                        "<ansiyellow>⚠️ File indexing failed - file autocompletion may be limited</ansiyellow>"
+                    )
+                )
         except Exception as e:
             print_formatted_text(HTML(f"<ansiyellow>⚠️ File indexing error: {e}</ansiyellow>"))
 
     def _get_command_completer(self) -> WordCompleter:
         """Create command completer."""
-        command_list = [f"/{cmd}" for cmd in self.commands.keys()] if hasattr(self, 'commands') else []
+        command_list = (
+            [f"/{cmd}" for cmd in self.commands.keys()] if hasattr(self, "commands") else []
+        )
         if not command_list:  # Fallback for initial setup
             command_list = ["/help", "/exit", "/quit", "/status", "/agent-default", "/clear"]
         return WordCompleter(command_list, ignore_case=True)
@@ -100,7 +110,7 @@ class InteractiveShell:
     def _in_file_completion_mode(self) -> bool:
         """Check if we're currently in file completion mode."""
         try:
-            if hasattr(self, 'session') and self.session.app and self.session.app.current_buffer:
+            if hasattr(self, "session") and self.session.app and self.session.app.current_buffer:
                 text = self.session.app.current_buffer.text
                 cursor_pos = self.session.app.current_buffer.cursor_position
                 return self.suggestion_handler.extract_file_query(text, cursor_pos) is not None
@@ -131,104 +141,113 @@ class InteractiveShell:
 
         except Exception:
             pass  # Ignore errors in number selection
-    
+
     def _register_builtin_commands(self):
         """Register built-in shell commands."""
         self.commands = {
-            'help': self._cmd_help,
-            'exit': self._cmd_exit,
-            'quit': self._cmd_exit,
-            'status': self._cmd_status,
-            'agent-default': self._cmd_agent_default,
-            'clear': self._cmd_clear,
+            "help": self._cmd_help,
+            "exit": self._cmd_exit,
+            "quit": self._cmd_exit,
+            "status": self._cmd_status,
+            "agent-default": self._cmd_agent_default,
+            "clear": self._cmd_clear,
         }
-    
+
     def _get_prompt_text(self) -> str:
         """Generate dynamic prompt text with status indicators."""
         auth_status = self.auth.get_auth_status()
         config_status = self.config.get_config_status()
-        
+
         # Auth indicator
         auth_icon = "✅" if auth_status["authenticated"] else "❌"
-        
+
         # Agent indicator
         agent_icon = "🤖" if config_status["has_default_agent"] else "❓"
-        
+
         return f"buddyctl {auth_icon}{agent_icon}> "
-    
-    
+
     def _parse_command(self, user_input: str) -> tuple[Optional[str], List[str]]:
         """Parse user input into command and arguments."""
         user_input = user_input.strip()
-        
-        if not user_input.startswith('/'):
+
+        if not user_input.startswith("/"):
             return None, []
-        
+
         # Remove leading '/' and split
         parts = user_input[1:].split()
-        
+
         if not parts:
             return None, []
-        
+
         command = parts[0]
         args = parts[1:] if len(parts) > 1 else []
-        
+
         return command, args
-    
+
     def _cmd_help(self, args: List[str]) -> None:
         """Show available commands."""
         print_formatted_text(HTML("<b>Available Commands:</b>"))
         print()
-        
+
         commands_help = {
-            'help': 'Show this help message',
-            'exit/quit': 'Exit the interactive shell',
-            'status': 'Show current authentication and agent status',
-            'agent-default': 'Set the default agent ID',
-            'clear': 'Clear the screen',
+            "help": "Show this help message",
+            "exit/quit": "Exit the interactive shell",
+            "status": "Show current authentication and agent status",
+            "agent-default": "Set the default agent ID",
+            "clear": "Clear the screen",
         }
-        
+
         for cmd, desc in commands_help.items():
             print_formatted_text(HTML(f"  <ansigreen>/{cmd}</ansigreen> - {desc}"))
         print()
-    
+
     def _cmd_exit(self, args: List[str]) -> None:
         """Exit the shell."""
         print_formatted_text(HTML("<ansiyellow>Goodbye! 👋</ansiyellow>"))
         self.running = False
-    
+
     def _cmd_status(self, args: List[str]) -> None:
         """Show current status."""
         auth_status = self.auth.get_auth_status()
         config_status = self.config.get_config_status()
-        
+
         print_formatted_text(HTML("<b>Current Status:</b>"))
         print()
-        
+
         # Authentication status
         if auth_status["authenticated"]:
-            print_formatted_text(HTML(f"✅ <ansigreen>Authentication: {auth_status['status']}</ansigreen> (Realm: {auth_status['realm']})"))
+            print_formatted_text(
+                HTML(
+                    f"✅ <ansigreen>Authentication: {auth_status['status']}</ansigreen> (Realm: {auth_status['realm']})"
+                )
+            )
         else:
-            realm_info = f" (Realm: {auth_status['realm']})" if auth_status['realm'] else ""
-            print_formatted_text(HTML(f"❌ <ansired>Authentication: {auth_status['status']}</ansired>{realm_info}"))
-        
+            realm_info = f" (Realm: {auth_status['realm']})" if auth_status["realm"] else ""
+            print_formatted_text(
+                HTML(f"❌ <ansired>Authentication: {auth_status['status']}</ansired>{realm_info}")
+            )
+
         # Agent status
         if config_status["has_default_agent"]:
-            print_formatted_text(HTML(f"🤖 <ansigreen>Default Agent: {config_status['default_agent_id']}</ansigreen>"))
+            print_formatted_text(
+                HTML(f"🤖 <ansigreen>Default Agent: {config_status['default_agent_id']}</ansigreen>")
+            )
         else:
             print_formatted_text(HTML("🤖 <ansiyellow>Default Agent: Not configured</ansiyellow>"))
-        
+
         print()
-    
+
     def _cmd_agent_default(self, args: List[str]) -> None:
         """Set default agent ID."""
         if not args:
             print_formatted_text(HTML("<ansired>Error: Agent ID required</ansired>"))
-            print_formatted_text(HTML("Usage: <ansiblue>/agent-default &lt;agent_id&gt;</ansiblue>"))
+            print_formatted_text(
+                HTML("Usage: <ansiblue>/agent-default &lt;agent_id&gt;</ansiblue>")
+            )
             return
-        
+
         agent_id = args[0]
-        
+
         try:
             # Validate agent ID
             self.validator.validate_agent(agent_id, check_existence=False)
@@ -236,70 +255,76 @@ class InteractiveShell:
             print_formatted_text(HTML(f"<ansigreen>✓ Default agent set to: {agent_id}</ansigreen>"))
         except (ConfigurationError, AgentValidationError) as e:
             print_formatted_text(HTML(f"<ansired>Error: {e}</ansired>"))
-    
+
     def _cmd_clear(self, args: List[str]) -> None:
         """Clear the screen."""
         import os
-        os.system('clear' if os.name == 'posix' else 'cls')
+
+        os.system("clear" if os.name == "posix" else "cls")
         # Redisplay banner after clearing
         display_banner(self.auth, self.config)
-    
+
     def _execute_command(self, command: str, args: List[str]) -> None:
         """Execute a parsed command."""
         if command not in self.commands:
             print_formatted_text(HTML(f"<ansired>Unknown command: /{command}</ansired>"))
             print_formatted_text(HTML("Type <ansiblue>/help</ansiblue> for available commands."))
             return
-        
+
         try:
             self.commands[command](args)
         except Exception as e:
             print_formatted_text(HTML(f"<ansired>Error executing command: {e}</ansired>"))
-    
+
     def _send_chat_message(self, message: str) -> None:
         """Send a chat message to the configured agent."""
         # Get default agent ID
         agent_id = self.config.get_default_agent_id()
 
         if not agent_id:
-            print_formatted_text(HTML(
-                "<ansired>No default agent configured. Use <ansiblue>/agent-default &lt;id&gt;</ansiblue> to set one.</ansired>"
-            ))
+            print_formatted_text(
+                HTML(
+                    "<ansired>No default agent configured. Use <ansiblue>/agent-default &lt;id&gt;</ansiblue> to set one.</ansired>"
+                )
+            )
             return
 
         # Process file references
         processed_message = self._process_file_references(message)
         if processed_message is None:
             return  # Error occurred during file processing
-        
+
         try:
             # Show loading indicator
-            print_formatted_text(HTML("<ansicyan>🤖 buddyctl:</ansicyan> <ansiyellow>⏳ Pensando...</ansiyellow>"), end="")
-            
+            print_formatted_text(
+                HTML("<ansicyan>🤖 buddyctl:</ansicyan> <ansiyellow>⏳ Pensando...</ansiyellow>"),
+                end="",
+            )
+
             # Collect response chunks
             response_chunks = []
             first_chunk = True
-            
+
             def on_message_chunk(chunk: str):
                 """Handle each chunk of the streaming response."""
                 nonlocal first_chunk
-                
+
                 response_chunks.append(chunk)
-                
+
                 # Clear loading indicator on first chunk and show buddyctl label
                 if first_chunk:
                     print("\r", end="")  # Clear current line
                     print_formatted_text(HTML("<ansicyan>🤖 buddyctl:</ansicyan> "), end="")
                     first_chunk = False
-                
+
                 print(chunk, end="", flush=True)
-            
+
             # Send the chat message with streaming
             self.chat_client.chat_stream(agent_id, processed_message, on_message_chunk)
-            
+
             # Add final newline
             print()
-            
+
         except ValueError as e:
             print_formatted_text(HTML(f"<ansired>Error: {e}</ansired>"))
         except AuthenticationError as e:
@@ -311,31 +336,58 @@ class InteractiveShell:
 
             # Check if it's a streaming-specific error
             error_str = str(e)
-            if "streaming response content" in error_str or "status 403" in error_str or "status 401" in error_str:
+            if (
+                "streaming response content" in error_str
+                or "status 403" in error_str
+                or "status 401" in error_str
+            ):
                 # Handle authentication/permission errors
                 if "403" in error_str or "Forbidden" in error_str:
-                    print_formatted_text(HTML("<ansired>❌ Access forbidden. Please check:</ansired>"))
+                    print_formatted_text(
+                        HTML("<ansired>❌ Access forbidden. Please check:</ansired>")
+                    )
                     print_formatted_text(HTML("  • Your API credentials are valid"))
                     print_formatted_text(HTML("  • You have permission to use this agent"))
                     print_formatted_text(HTML("  • Your account/realm is properly configured"))
                     print()
-                    print_formatted_text(HTML("<ansiyellow>💡 Tip: Try re-authenticating or contact your administrator</ansiyellow>"))
+                    print_formatted_text(
+                        HTML(
+                            "<ansiyellow>💡 Tip: Try re-authenticating or contact your administrator</ansiyellow>"
+                        )
+                    )
                     return
                 elif "401" in error_str or "Unauthorized" in error_str:
-                    print_formatted_text(HTML("<ansired>❌ Authentication failed. Your session may have expired.</ansired>"))
-                    print_formatted_text(HTML("<ansiyellow>💡 Tip: Try logging in again</ansiyellow>"))
+                    print_formatted_text(
+                        HTML(
+                            "<ansired>❌ Authentication failed. Your session may have expired.</ansired>"
+                        )
+                    )
+                    print_formatted_text(
+                        HTML("<ansiyellow>💡 Tip: Try logging in again</ansiyellow>")
+                    )
                     return
 
                 # Try fallback for other streaming errors
-                print_formatted_text(HTML("<ansiyellow>⚠️ Streaming failed. Trying non-streaming mode...</ansiyellow>"))
+                print_formatted_text(
+                    HTML(
+                        "<ansiyellow>⚠️ Streaming failed. Trying non-streaming mode...</ansiyellow>"
+                    )
+                )
             else:
                 print_formatted_text(HTML(f"<ansired>Chat error: {e}</ansired>"))
-                print_formatted_text(HTML("<ansiyellow>Trying fallback non-streaming mode...</ansiyellow>"))
+                print_formatted_text(
+                    HTML("<ansiyellow>Trying fallback non-streaming mode...</ansiyellow>")
+                )
 
             # Fallback to non-streaming
             try:
                 # Show loading for fallback
-                print_formatted_text(HTML("<ansicyan>🤖 buddyctl:</ansicyan> <ansiyellow>⏳ Processando...</ansiyellow>"), end="")
+                print_formatted_text(
+                    HTML(
+                        "<ansicyan>🤖 buddyctl:</ansicyan> <ansiyellow>⏳ Processando...</ansiyellow>"
+                    ),
+                    end="",
+                )
                 response = self.chat_client.chat_non_stream(agent_id, processed_message)
                 print("\r", end="")  # Clear loading
                 print_formatted_text(HTML(f"<ansicyan>🤖 buddyctl:</ansicyan> {response.message}"))
@@ -343,13 +395,25 @@ class InteractiveShell:
                 print("\r", end="")  # Clear loading
                 error_str = str(fallback_error)
                 if "403" in error_str or "Forbidden" in error_str:
-                    print_formatted_text(HTML("<ansired>❌ Fallback também falhou: Acesso negado</ansired>"))
-                    print_formatted_text(HTML("<ansiyellow>Por favor verifique suas credenciais e permissões.</ansiyellow>"))
+                    print_formatted_text(
+                        HTML("<ansired>❌ Fallback também falhou: Acesso negado</ansired>")
+                    )
+                    print_formatted_text(
+                        HTML(
+                            "<ansiyellow>Por favor verifique suas credenciais e permissões.</ansiyellow>"
+                        )
+                    )
                 elif "401" in error_str:
-                    print_formatted_text(HTML("<ansired>❌ Fallback também falhou: Autenticação expirada</ansired>"))
-                    print_formatted_text(HTML("<ansiyellow>Por favor faça login novamente.</ansiyellow>"))
+                    print_formatted_text(
+                        HTML("<ansired>❌ Fallback também falhou: Autenticação expirada</ansired>")
+                    )
+                    print_formatted_text(
+                        HTML("<ansiyellow>Por favor faça login novamente.</ansiyellow>")
+                    )
                 else:
-                    print_formatted_text(HTML(f"<ansired>❌ Fallback também falhou: {fallback_error}</ansired>"))
+                    print_formatted_text(
+                        HTML(f"<ansired>❌ Fallback também falhou: {fallback_error}</ansired>")
+                    )
 
     def _process_file_references(self, message: str) -> Optional[str]:
         """Process file references in the message and load file contents.
@@ -397,25 +461,33 @@ class InteractiveShell:
             for file_path, content in file_contents.items():
                 if content is not None:
                     # Show which file was loaded
-                    file_size = len(content.encode('utf-8'))
+                    file_size = len(content.encode("utf-8"))
                     size_str = self._format_file_size(file_size)
-                    print_formatted_text(HTML(f"  • <ansiblue>@{file_path}</ansiblue> ({size_str})"))
+                    print_formatted_text(
+                        HTML(f"  • <ansiblue>@{file_path}</ansiblue> ({size_str})")
+                    )
 
                     # Add file content to message
                     file_section = f"\n\n--- Content of @{file_path} ---\n{content}\n--- End of @{file_path} ---"
                     enhanced_message += file_section
                     loaded_files.append(file_path)
                 else:
-                    print_formatted_text(HTML(f"  • <ansired>@{file_path} (failed to load)</ansired>"))
+                    print_formatted_text(
+                        HTML(f"  • <ansired>@{file_path} (failed to load)</ansired>")
+                    )
 
             if loaded_files:
-                print_formatted_text(HTML(f"<ansigreen>✅ Loaded {len(loaded_files)} file(s)</ansigreen>"))
+                print_formatted_text(
+                    HTML(f"<ansigreen>✅ Loaded {len(loaded_files)} file(s)</ansigreen>")
+                )
                 print()
 
             return enhanced_message
 
         except Exception as e:
-            print_formatted_text(HTML(f"<ansired>❌ Error processing file references: {e}</ansired>"))
+            print_formatted_text(
+                HTML(f"<ansired>❌ Error processing file references: {e}</ansired>")
+            )
             return None
 
     def _format_file_size(self, size_bytes: int) -> str:
@@ -436,39 +508,47 @@ class InteractiveShell:
             # If enhanced input fails, fallback to simple input
             print_formatted_text(HTML(f"<ansiyellow>⚠️ Input error: {e}</ansiyellow>"))
             return input(self._get_prompt_text())
-    
+
     def run(self) -> None:
         """Run the interactive shell."""
         # Display initial banner
         display_banner(self.auth, self.config)
-        
+
         print_formatted_text(HTML("<ansicyan>Welcome to buddyctl interactive shell!</ansicyan>"))
         print_formatted_text(HTML("• Type any message to chat with your agent"))
-        print_formatted_text(HTML("• Type <ansiblue>/help</ansiblue> for commands or <ansiblue>/exit</ansiblue> to quit"))
+        print_formatted_text(
+            HTML(
+                "• Type <ansiblue>/help</ansiblue> for commands or <ansiblue>/exit</ansiblue> to quit"
+            )
+        )
         print()
-        
+
         while self.running:
             try:
                 # Get user input with enhanced autocompletion if available
                 user_input = self._get_user_input()
-                
+
                 if not user_input.strip():
                     continue
-                
+
                 # Check if it's a command (starts with /) or a chat message
-                if user_input.startswith('/'):
+                if user_input.startswith("/"):
                     # Parse and execute command
                     command, args = self._parse_command(user_input)
-                    
+
                     if command is None:
-                        print_formatted_text(HTML("<ansiyellow>Commands must start with '/' (e.g., /help)</ansiyellow>"))
+                        print_formatted_text(
+                            HTML(
+                                "<ansiyellow>Commands must start with '/' (e.g., /help)</ansiyellow>"
+                            )
+                        )
                         continue
-                    
+
                     self._execute_command(command, args)
                 else:
                     # It's a chat message - send to agent
                     self._send_chat_message(user_input)
-                
+
             except KeyboardInterrupt:
                 # Handle Ctrl+C gracefully
                 print_formatted_text(HTML("\n<ansiyellow>Use /exit to quit</ansiyellow>"))
@@ -476,5 +556,5 @@ class InteractiveShell:
             except EOFError:
                 # Handle Ctrl+D
                 break
-        
+
         print()  # Add final newline

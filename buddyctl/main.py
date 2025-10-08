@@ -1,12 +1,10 @@
 """Main CLI entry point for buddyctl."""
 
-import os
 import typer
-from .banner import display_banner
-from .auth import StackSpotAuth, AuthenticationError
-from .config import BuddyConfig, ConfigurationError
-from .agent_validator import AgentValidator, AgentValidationError
-from .interactive import InteractiveShell
+from .core.auth import StackSpotAuth, AuthenticationError
+from .core.config import BuddyConfig, ConfigurationError
+from .cli.agent_validator import AgentValidator, AgentValidationError
+from .cli.interactive import InteractiveShell
 
 app = typer.Typer(help="buddyctl - CLI tool for buddy management")
 auth_app = typer.Typer(help="Authentication commands")
@@ -16,14 +14,14 @@ app.add_typer(auth_app, name="auth")
 def initialize_auth() -> StackSpotAuth:
     """Initialize authentication using only system environment variables."""
     auth = StackSpotAuth()
-    
+
     try:
         # Attempt to get a valid token (will authenticate if needed)
         auth.get_valid_token()
     except AuthenticationError as e:
         typer.echo(f"Authentication failed: {e}", err=True)
         # Continue execution even if auth fails for now
-    
+
     return auth
 
 
@@ -80,7 +78,7 @@ def set_default_agent(agent_id: str) -> None:
     config = BuddyConfig()
     auth = StackSpotAuth()
     validator = AgentValidator(auth)
-    
+
     try:
         # Validate agent ID format and existence
         validator.validate_agent(agent_id, check_existence=False)

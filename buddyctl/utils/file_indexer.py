@@ -13,22 +13,53 @@ class FileIndexer:
 
     # Directories to ignore during indexing
     IGNORED_DIRS = {
-        '.git', '.hg', '.svn', '.bzr',  # VCS
-        'node_modules', '__pycache__', '.pytest_cache',  # Dependencies/cache
-        'build', 'dist', 'target', '.cargo',  # Build outputs
-        '.venv', 'venv', 'env', '.env',  # Virtual environments
-        '.idea', '.vscode', '.vs',  # IDEs
-        'coverage', '.coverage', '.nyc_output',  # Coverage
-        '.DS_Store', 'Thumbs.db',  # OS files
-        '.tmp', 'tmp', 'temp',  # Temp directories
+        ".git",
+        ".hg",
+        ".svn",
+        ".bzr",  # VCS
+        "node_modules",
+        "__pycache__",
+        ".pytest_cache",  # Dependencies/cache
+        "build",
+        "dist",
+        "target",
+        ".cargo",  # Build outputs
+        ".venv",
+        "venv",
+        "env",
+        ".env",  # Virtual environments
+        ".idea",
+        ".vscode",
+        ".vs",  # IDEs
+        "coverage",
+        ".coverage",
+        ".nyc_output",  # Coverage
+        ".DS_Store",
+        "Thumbs.db",  # OS files
+        ".tmp",
+        "tmp",
+        "temp",  # Temp directories
     }
 
     # File extensions to ignore
     IGNORED_EXTENSIONS = {
-        '.pyc', '.pyo', '.pyd', '.so', '.dll', '.dylib',  # Compiled
-        '.exe', '.bat', '.cmd', '.com',  # Executables
-        '.log', '.pid', '.lock', '.tmp',  # Temp/log files
-        '.swp', '.swo', '~',  # Editor temp files
+        ".pyc",
+        ".pyo",
+        ".pyd",
+        ".so",
+        ".dll",
+        ".dylib",  # Compiled
+        ".exe",
+        ".bat",
+        ".cmd",
+        ".com",  # Executables
+        ".log",
+        ".pid",
+        ".lock",
+        ".tmp",  # Temp/log files
+        ".swp",
+        ".swo",
+        "~",  # Editor temp files
     }
 
     def __init__(self, root_path: Optional[str] = None):
@@ -46,15 +77,12 @@ class FileIndexer:
 
     def _should_ignore_dir(self, dir_name: str) -> bool:
         """Check if a directory should be ignored during indexing."""
-        return (
-            dir_name.startswith('.') or
-            dir_name in self.IGNORED_DIRS
-        )
+        return dir_name.startswith(".") or dir_name in self.IGNORED_DIRS
 
     def _should_ignore_file(self, file_path: Path) -> bool:
         """Check if a file should be ignored during indexing."""
         # Hidden files (starting with .)
-        if file_path.name.startswith('.'):
+        if file_path.name.startswith("."):
             return True
 
         # Check extension
@@ -88,7 +116,7 @@ class FileIndexer:
                 return {
                     "name": path.name,
                     "type": "file",
-                    "path": str(path.relative_to(relative_to))
+                    "path": str(path.relative_to(relative_to)),
                 }
 
             elif path.is_dir():
@@ -109,7 +137,7 @@ class FileIndexer:
                     "name": path.name,
                     "type": "folder",
                     "path": str(path.relative_to(relative_to)),
-                    "children": children
+                    "children": children,
                 }
 
         except (OSError, PermissionError):
@@ -134,11 +162,11 @@ class FileIndexer:
                 return False
 
             # Create temporary file for the index
-            fd, temp_path = tempfile.mkstemp(suffix='.json', prefix='buddyctl_index_')
+            fd, temp_path = tempfile.mkstemp(suffix=".json", prefix="buddyctl_index_")
             self.index_file = Path(temp_path)
 
             # Write index to file
-            with os.fdopen(fd, 'w', encoding='utf-8') as f:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
                 json.dump(self.file_tree, f, indent=2, ensure_ascii=False)
 
             # Count indexed items
@@ -202,12 +230,14 @@ class FileIndexer:
         files = [c for c in children if c.get("type") == "file"]
 
         for item in (dirs + files)[:max_results]:
-            suggestions.append({
-                "name": item["name"],
-                "type": item["type"],
-                "path": item["path"],
-                "display": item["name"] + ("/" if item["type"] == "folder" else "")
-            })
+            suggestions.append(
+                {
+                    "name": item["name"],
+                    "type": item["type"],
+                    "path": item["path"],
+                    "display": item["name"] + ("/" if item["type"] == "folder" else ""),
+                }
+            )
 
         return suggestions
 
@@ -226,12 +256,14 @@ class FileIndexer:
 
         for item in (dirs + files)[:max_results]:
             full_path = f"{dir_path}/{item['name']}"
-            suggestions.append({
-                "name": item["name"],
-                "type": item["type"],
-                "path": item["path"],
-                "display": full_path + ("/" if item["type"] == "folder" else "")
-            })
+            suggestions.append(
+                {
+                    "name": item["name"],
+                    "type": item["type"],
+                    "path": item["path"],
+                    "display": full_path + ("/" if item["type"] == "folder" else ""),
+                }
+            )
 
         return suggestions
 
@@ -253,21 +285,29 @@ class FileIndexer:
         children = target_dir["children"]
 
         # Sort: directories first, then files
-        dirs = [c for c in children if c.get("type") == "folder"
-                and c["name"].lower().startswith(name_part)]
-        files = [c for c in children if c.get("type") == "file"
-                 and c["name"].lower().startswith(name_part)]
+        dirs = [
+            c
+            for c in children
+            if c.get("type") == "folder" and c["name"].lower().startswith(name_part)
+        ]
+        files = [
+            c
+            for c in children
+            if c.get("type") == "file" and c["name"].lower().startswith(name_part)
+        ]
 
         base_path = "/".join(dir_parts) if dir_parts else ""
 
         for item in (dirs + files)[:max_results]:
             full_path = f"{base_path}/{item['name']}" if base_path else item["name"]
-            suggestions.append({
-                "name": item["name"],
-                "type": item["type"],
-                "path": item["path"],
-                "display": full_path + ("/" if item["type"] == "folder" else "")
-            })
+            suggestions.append(
+                {
+                    "name": item["name"],
+                    "type": item["type"],
+                    "path": item["path"],
+                    "display": full_path + ("/" if item["type"] == "folder" else ""),
+                }
+            )
 
         return suggestions
 
@@ -283,12 +323,14 @@ class FileIndexer:
             # Check if current item matches
             if node["name"].lower().startswith(query_lower):
                 display_path = f"{current_path}/{node['name']}" if current_path else node["name"]
-                suggestions.append({
-                    "name": node["name"],
-                    "type": node["type"],
-                    "path": node["path"],
-                    "display": display_path + ("/" if node["type"] == "folder" else "")
-                })
+                suggestions.append(
+                    {
+                        "name": node["name"],
+                        "type": node["type"],
+                        "path": node["path"],
+                        "display": display_path + ("/" if node["type"] == "folder" else ""),
+                    }
+                )
 
             # Search children
             if node.get("type") == "folder" and "children" in node:
@@ -359,7 +401,7 @@ class FileIndexer:
                 return None
 
             # Read file content
-            with open(full_path, 'r', encoding='utf-8', errors='ignore') as f:
+            with open(full_path, "r", encoding="utf-8", errors="ignore") as f:
                 return f.read()
 
         except (OSError, PermissionError, UnicodeDecodeError):

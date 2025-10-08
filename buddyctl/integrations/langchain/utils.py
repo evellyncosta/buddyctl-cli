@@ -25,22 +25,22 @@ from langchain_core.messages import (
 
 def convert_langchain_messages_to_stackspot(messages: List[BaseMessage]) -> str:
     """Convert LangChain messages to StackSpot API format.
-    
+
     StackSpot API expects a single 'user_prompt' string, not a message array.
     This function converts LangChain message history into a formatted string
     that preserves the conversation context.
-    
+
     The conversion follows this pattern:
     - SystemMessage → "System: {content}\\n\\n"
     - HumanMessage → "User: {content}\\n\\n"
     - AIMessage → "Assistant: {content}\\n\\n"
-    
+
     Args:
         messages: List of LangChain messages
-        
+
     Returns:
         Formatted string with complete conversation history
-        
+
     Example:
         >>> from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
         >>> messages = [
@@ -52,15 +52,15 @@ def convert_langchain_messages_to_stackspot(messages: List[BaseMessage]) -> str:
         >>> prompt = convert_langchain_messages_to_stackspot(messages)
         >>> print(prompt)
         System: You are a Python expert
-        
+
         User: Explain decorators
-        
+
         Assistant: Decorators are functions that...
-        
+
         User: Give me an example
     """
     parts = []
-    
+
     for message in messages:
         if isinstance(message, SystemMessage):
             parts.append(f"System: {message.content}")
@@ -72,6 +72,6 @@ def convert_langchain_messages_to_stackspot(messages: List[BaseMessage]) -> str:
             # Fallback for unknown message types
             # This ensures compatibility with future LangChain message types
             parts.append(f"Unknown: {message.content}")
-    
+
     # Join all parts with double newline for readability
     return "\n\n".join(parts)

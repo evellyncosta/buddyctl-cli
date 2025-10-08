@@ -4,11 +4,8 @@ import sys
 from typing import List, Dict, Any, Optional
 from prompt_toolkit.formatted_text import HTML
 from prompt_toolkit.shortcuts import print_formatted_text
-from prompt_toolkit.application import get_app
-from prompt_toolkit.layout.containers import HSplit, Window
+from prompt_toolkit.layout.containers import Window
 from prompt_toolkit.layout.controls import FormattedTextControl
-from prompt_toolkit.widgets import Frame
-from prompt_toolkit.layout import Layout
 
 from .autosuggestion import AutoSuggestionHandler
 
@@ -65,9 +62,9 @@ class VisualSuggestionDisplay:
         lines.append("📁 File suggestions:")
 
         for i, suggestion in enumerate(self.current_suggestions, 1):
-            icon = "📁" if suggestion['type'] == 'folder' else "📄"
-            name = suggestion['display']
-            color = "ansiblue" if suggestion['type'] == 'folder' else "white"
+            icon = "📁" if suggestion["type"] == "folder" else "📄"
+            name = suggestion["display"]
+            color = "ansiblue" if suggestion["type"] == "folder" else "white"
 
             line = f"  <{color}>{i}. {icon} {name}</{color}>"
             lines.append(line)
@@ -91,7 +88,9 @@ class VisualSuggestionDisplay:
             return
 
         # Calculate how many lines to clear
-        lines_to_clear = len(self.current_suggestions) + 3  # suggestions + header + tip + empty line
+        lines_to_clear = (
+            len(self.current_suggestions) + 3
+        )  # suggestions + header + tip + empty line
 
         # Move cursor up and clear lines
         for _ in range(lines_to_clear):
@@ -134,9 +133,9 @@ class EnhancedVisualSuggestionDisplay:
             lines = ["📁 File suggestions:"]
 
             for i, suggestion in enumerate(self.current_suggestions, 1):
-                icon = "📁" if suggestion['type'] == 'folder' else "📄"
-                name = suggestion['display']
-                color = "ansiblue" if suggestion['type'] == 'folder' else "white"
+                icon = "📁" if suggestion["type"] == "folder" else "📄"
+                name = suggestion["display"]
+                color = "ansiblue" if suggestion["type"] == "folder" else "white"
                 line = f"  {i}. {icon} {name}"
                 lines.append(line)
 
@@ -204,9 +203,9 @@ class SimpleInlineSuggestions:
         print_formatted_text(HTML("<ansiyellow>📁 Files:</ansiyellow>"), end=" ")
 
         for i, suggestion in enumerate(suggestions, 1):
-            icon = "📁" if suggestion['type'] == 'folder' else "📄"
-            name = suggestion['name']
-            color = "ansiblue" if suggestion['type'] == 'folder' else "white"
+            icon = "📁" if suggestion["type"] == "folder" else "📄"
+            name = suggestion["name"]
+            color = "ansiblue" if suggestion["type"] == "folder" else "white"
 
             if i > 1:
                 print_formatted_text(HTML(" | "), end="")

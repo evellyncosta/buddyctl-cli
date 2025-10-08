@@ -4,7 +4,7 @@ CLI tool for managing StackSpot AI assistants (buddies).
 
 ## Prerequisites
 
-- Python 3.8 or higher
+- Python 3.9 or higher
 - Poetry (Python dependency manager)
 
 ## Installation
@@ -35,7 +35,9 @@ This will:
 - typer[all] - CLI framework
 - httpx - HTTP client
 - prompt_toolkit - Interactive prompts
-- langchain - LLM framework integration
+- langchain ^0.3.27 - LLM framework integration
+- langchain-core ^0.3.27 - LangChain core components
+- pydantic ^2.0.0 - Data validation
 
 ## Configuration
 
@@ -205,23 +207,68 @@ poetry run ruff check .
 ### Project Structure
 
 ```
-buddyctl/
-├── buddyctl/
+buddyctl-cli/
+├── buddyctl/                # Main package
 │   ├── __init__.py
+│   ├── __main__.py
 │   ├── main.py              # CLI entry point
-│   ├── auth.py              # OAuth2 authentication
-│   ├── config.py            # Configuration management
-│   ├── chat_client.py       # Chat with SSE streaming
-│   ├── agent_validator.py   # Agent validation
-│   ├── api_client.py        # API client wrapper
-│   ├── interactive.py       # Interactive shell
-│   ├── file_indexer.py      # File indexing system
-│   ├── autosuggestion.py    # File autocompletion
-│   └── banner.py            # ASCII banner
+│   ├── core/                # Core modules
+│   │   ├── auth.py          # OAuth2 authentication
+│   │   ├── config.py        # Configuration management
+│   │   └── api_client.py    # API client wrapper
+│   ├── cli/                 # CLI components
+│   │   ├── interactive.py   # Interactive shell
+│   │   ├── agent_validator.py   # Agent validation
+│   │   └── chat_client.py   # Chat with SSE streaming
+│   ├── integrations/        # External integrations
+│   │   └── langchain/       # LangChain integration
+│   │       ├── chat_model.py    # StackSpot LangChain wrapper
+│   │       ├── chains.py        # Orchestration chains
+│   │       ├── tools.py         # LangChain tools
+│   │       ├── utils.py         # Utilities
+│   │       └── examples/        # Usage examples
+│   ├── ui/                  # User interface
+│   │   ├── banner.py        # ASCII banner
+│   │   ├── autosuggestion.py    # File autocompletion
+│   │   ├── enhanced_input.py    # Enhanced input
+│   │   └── visual_suggestions.py # Visual suggestions
+│   └── utils/               # Utilities
+│       ├── file_indexer.py  # File indexing system
+│       └── file_autocomplete.py # File autocomplete
 ├── pyproject.toml           # Poetry configuration
 ├── poetry.lock              # Lock file (version pinning)
 ├── .env.example             # Environment template
 └── README.md                # This file
+```
+
+### Using as a Library
+
+BuddyCtl can be used as a library in other Python projects:
+
+```python
+# Install from PyPI (when published)
+pip install buddyctl
+
+# Or install from git
+pip install git+https://github.com/yourusername/buddyctl-cli.git
+
+# Use the LangChain integration
+from buddyctl.integrations.langchain import StackSpotChatModel, create_coder_differ_chain
+
+# Create a StackSpot chat model
+model = StackSpotChatModel(agent_id="your-agent-id")
+response = model.invoke("Explain Python decorators")
+
+# Or use orchestration chains
+chain = create_coder_differ_chain(
+    coder_agent_id="coder-123",
+    differ_agent_id="differ-456"
+)
+
+result = chain.invoke({
+    "file_path": "src/main.py",
+    "instruction": "Add error handling"
+})
 ```
 
 ## Troubleshooting
