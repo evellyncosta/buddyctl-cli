@@ -1,21 +1,25 @@
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
-
-[project]
+[tool.poetry]
 name = "buddyctl"
 version = "0.1.0"
-description = "CLI tool for buddy management"
-authors = [{name = "Evellyn"}]
-dependencies = [
-    "typer[all]>=0.9.0",
-    "httpx>=0.24.0",
-    "prompt_toolkit>=3.0.0",
-]
-requires-python = ">=3.8"
+description = "CLI tool for managing StackSpot AI assistants (buddies)"
+authors = ["Evellyn <seu@email.com>"]
+readme = "README.md"
+packages = [{include = "buddyctl"}]
 
-[project.scripts]
+[tool.poetry.dependencies]
+python = "^3.8"
+typer = {extras = ["all"], version = "^0.9.0"}
+httpx = "^0.24.0"
+prompt-toolkit = "^3.0.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^7.4.0"
+black = "^23.0.0"
+ruff = "^0.1.0"
+
+[tool.poetry.scripts]
 buddyctl = "buddyctl.main:app"
 
-[tool.hatch.build.targets.wheel]
-packages = ["buddyctl"]
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
