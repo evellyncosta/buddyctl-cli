@@ -15,6 +15,7 @@ from ..core.config import BuddyConfig, ConfigurationError
 from .agent_validator import AgentValidator, AgentValidationError
 from ..core.provider_validator import ProviderValidator
 from ..core.provider_registry import ProviderRegistry
+from ..core.providers import ProviderManager
 from ..ui.banner import display_banner
 from .chat_client import ChatClient
 from ..utils.file_indexer import FileIndexer
@@ -33,7 +34,8 @@ class InteractiveShell:
         self.config = BuddyConfig()
         self.validator = AgentValidator(self.auth)
         self.provider_validator = ProviderValidator(self.config)
-        self.chat_client = ChatClient(self.auth, self.config)
+        self.chat_client = ChatClient(self.auth, self.config)  # Mantido para compatibilidade
+        self.provider_manager = ProviderManager(self.config, auth=self.auth)  # NEW: Provider abstraction
         self.commands: Dict[str, Callable] = {}
         self.running = True
 
@@ -404,18 +406,7 @@ class InteractiveShell:
             print_formatted_text(HTML(f"<ansired>Error executing command: {e}</ansired>"))
 
     def _send_chat_message(self, message: str) -> None:
-        """Send a chat message to the configured agent."""
-        # Get default agent ID
-        agent_id = self.config.get_default_agent_id()
-
-        if not agent_id:
-            print_formatted_text(
-                HTML(
-                    "<ansired>No default agent configured. Use <ansiblue>/agent-default &lt;id&gt;</ansiblue> to set one.</ansired>"
-                )
-            )
-            return
-
+        """Send a chat message using the current provider."""
         # Process file references
         processed_message = self._process_file_references(message)
         if processed_message is None:
@@ -429,15 +420,10 @@ class InteractiveShell:
             )
 
             # Collect response chunks
-            response_chunks = []
             first_chunk = True
 
-            def on_message_chunk(chunk: str):
-                """Handle each chunk of the streaming response."""
-                nonlocal first_chunk
-
-                response_chunks.append(chunk)
-
+            # Use ProviderManager for provider-agnostic chat
+            for chunk in self.provider_manager.chat_stream(processed_message):
                 # Clear loading indicator on first chunk and show buddyctl label
                 if first_chunk:
                     print("\r", end="")  # Clear current line
@@ -446,101 +432,35 @@ class InteractiveShell:
 
                 print(chunk, end="", flush=True)
 
-            # Send the chat message with streaming
-            self.chat_client.chat_stream(agent_id, processed_message, on_message_chunk)
-
             # Add final newline
             print()
 
-        except ValueError as e:
-            print_formatted_text(HTML(f"<ansired>Error: {e}</ansired>"))
-        except AuthenticationError as e:
-            print_formatted_text(HTML(f"<ansired>Authentication error: {e}</ansired>"))
-            print_formatted_text(HTML("Try checking your credentials and configuration."))
-        except Exception as e:
-            # Clear loading indicator
-            print("\r", end="")
+        except RuntimeError as e:
+            # ProviderManager wraps errors with mapped messages
+            print("\r", end="")  # Clear loading indicator
+            print_formatted_text(HTML(f"<ansired>❌ {e}</ansired>"))
 
-            # Check if it's a streaming-specific error
+            # Check for specific error patterns to provide helpful tips
             error_str = str(e)
-            if (
-                "streaming response content" in error_str
-                or "status 403" in error_str
-                or "status 401" in error_str
-            ):
-                # Handle authentication/permission errors
-                if "403" in error_str or "Forbidden" in error_str:
-                    print_formatted_text(
-                        HTML("<ansired>❌ Access forbidden. Please check:</ansired>")
-                    )
-                    print_formatted_text(HTML("  • Your API credentials are valid"))
-                    print_formatted_text(HTML("  • You have permission to use this agent"))
-                    print_formatted_text(HTML("  • Your account/realm is properly configured"))
-                    print()
-                    print_formatted_text(
-                        HTML(
-                            "<ansiyellow>💡 Tip: Try re-authenticating or contact your administrator</ansiyellow>"
-                        )
-                    )
-                    return
-                elif "401" in error_str or "Unauthorized" in error_str:
-                    print_formatted_text(
-                        HTML(
-                            "<ansired>❌ Authentication failed. Your session may have expired.</ansired>"
-                        )
-                    )
-                    print_formatted_text(
-                        HTML("<ansiyellow>💡 Tip: Try logging in again</ansiyellow>")
-                    )
-                    return
-
-                # Try fallback for other streaming errors
+            if "agent_id" in error_str.lower() and "not configured" in error_str.lower():
                 print_formatted_text(
-                    HTML(
-                        "<ansiyellow>⚠️ Streaming failed. Trying non-streaming mode...</ansiyellow>"
-                    )
+                    HTML("<ansiyellow>💡 Tip: Use /agent-default <id> to configure an agent</ansiyellow>")
                 )
-            else:
-                print_formatted_text(HTML(f"<ansired>Chat error: {e}</ansired>"))
+            elif "not available" in error_str.lower() or "credentials" in error_str.lower():
                 print_formatted_text(
-                    HTML("<ansiyellow>Trying fallback non-streaming mode...</ansiyellow>")
+                    HTML("<ansiyellow>💡 Tip: Check your credentials and authentication</ansiyellow>")
                 )
-
-            # Fallback to non-streaming
-            try:
-                # Show loading for fallback
-                print_formatted_text(
-                    HTML(
-                        "<ansicyan>🤖 buddyctl:</ansicyan> <ansiyellow>⏳ Processando...</ansiyellow>"
-                    ),
-                    end="",
-                )
-                response = self.chat_client.chat_non_stream(agent_id, processed_message)
-                print("\r", end="")  # Clear loading
-                print_formatted_text(HTML(f"<ansicyan>🤖 buddyctl:</ansicyan> {response.message}"))
-            except Exception as fallback_error:
-                print("\r", end="")  # Clear loading
-                error_str = str(fallback_error)
-                if "403" in error_str or "Forbidden" in error_str:
-                    print_formatted_text(
-                        HTML("<ansired>❌ Fallback também falhou: Acesso negado</ansired>")
-                    )
-                    print_formatted_text(
-                        HTML(
-                            "<ansiyellow>Por favor verifique suas credenciais e permissões.</ansiyellow>"
-                        )
-                    )
-                elif "401" in error_str:
-                    print_formatted_text(
-                        HTML("<ansired>❌ Fallback também falhou: Autenticação expirada</ansired>")
-                    )
-                    print_formatted_text(
-                        HTML("<ansiyellow>Por favor faça login novamente.</ansiyellow>")
-                    )
-                else:
-                    print_formatted_text(
-                        HTML(f"<ansired>❌ Fallback também falhou: {fallback_error}</ansired>")
-                    )
+        except ValueError as e:
+            # Configuration or validation errors
+            print("\r", end="")
+            print_formatted_text(HTML(f"<ansired>❌ Error: {e}</ansired>"))
+        except Exception as e:
+            # Unexpected errors
+            print("\r", end="")
+            print_formatted_text(HTML(f"<ansired>❌ Unexpected error: {e}</ansired>"))
+            print_formatted_text(
+                HTML("<ansiyellow>Please check your configuration and try again.</ansiyellow>")
+            )
 
     def _process_file_references(self, message: str) -> Optional[str]:
         """Process file references in the message and load file contents.
