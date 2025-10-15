@@ -72,14 +72,91 @@ class BuddyConfig:
 
         self._save_config(config)
 
+    def get_current_provider(self) -> str:
+        """Get the current LLM provider. Defaults to 'stackspot'."""
+        config = self._load_config()
+        return config.get("llm", {}).get("current_provider", "stackspot")
+
+    def set_current_provider(self, provider: str) -> None:
+        """Set the current LLM provider."""
+        if not provider or not provider.strip():
+            raise ConfigurationError("Provider name cannot be empty")
+
+        config = self._load_config()
+
+        # Initialize llm config if not exists
+        if "llm" not in config:
+            config["llm"] = {}
+
+        config["llm"]["current_provider"] = provider.strip().lower()
+        config["updated_at"] = datetime.now(timezone.utc).isoformat()
+
+        self._save_config(config)
+
+    def get_provider_config(self, provider: str) -> Optional[Dict[str, Any]]:
+        """Get configuration for a specific provider."""
+        config = self._load_config()
+        providers = config.get("llm", {}).get("providers", {})
+        return providers.get(provider)
+
+    def get_all_providers(self) -> Dict[str, Dict[str, Any]]:
+        """Get all provider configurations."""
+        config = self._load_config()
+        return config.get("llm", {}).get("providers", {})
+
+    def initialize_default_providers(self) -> None:
+        """Initialize default provider configurations if not present."""
+        config = self._load_config()
+
+        if "llm" not in config:
+            config["llm"] = {
+                "current_provider": "stackspot",
+                "providers": {
+                    "stackspot": {
+                        "enabled": True,
+                        "implemented": True,
+                        "requires_credentials": ["STACKSPOT_CLIENT_ID", "STACKSPOT_CLIENT_SECRET", "STACKSPOT_REALM"]
+                    },
+                    "openai": {
+                        "enabled": False,
+                        "implemented": False,
+                        "model": "gpt-4",
+                        "requires_credentials": ["OPENAI_API_KEY"]
+                    },
+                    "anthropic": {
+                        "enabled": False,
+                        "implemented": False,
+                        "model": "claude-3-5-sonnet-20241022",
+                        "requires_credentials": ["ANTHROPIC_API_KEY"]
+                    },
+                    "google": {
+                        "enabled": False,
+                        "implemented": False,
+                        "model": "gemini-pro",
+                        "requires_credentials": ["GOOGLE_API_KEY"]
+                    },
+                    "ollama": {
+                        "enabled": False,
+                        "implemented": False,
+                        "model": "llama2",
+                        "base_url": "http://localhost:11434",
+                        "requires_credentials": []
+                    }
+                }
+            }
+            config["updated_at"] = datetime.now(timezone.utc).isoformat()
+            self._save_config(config)
+
     def get_config_status(self) -> Dict[str, Any]:
         """Get current configuration status for display."""
         config = self._load_config()
         agent_id = config.get("default_agent_id")
         updated_at = config.get("updated_at")
+        current_provider = self.get_current_provider()
 
         return {
             "has_default_agent": bool(agent_id),
             "default_agent_id": agent_id,
+            "current_provider": current_provider,
             "updated_at": updated_at,
         }

@@ -13,6 +13,8 @@ from pathlib import Path
 from ..core.auth import StackSpotAuth, AuthenticationError
 from ..core.config import BuddyConfig, ConfigurationError
 from .agent_validator import AgentValidator, AgentValidationError
+from ..core.provider_validator import ProviderValidator
+from ..core.provider_registry import ProviderRegistry
 from ..ui.banner import display_banner
 from .chat_client import ChatClient
 from ..utils.file_indexer import FileIndexer
@@ -30,9 +32,13 @@ class InteractiveShell:
         self.auth = StackSpotAuth()
         self.config = BuddyConfig()
         self.validator = AgentValidator(self.auth)
+        self.provider_validator = ProviderValidator(self.config)
         self.chat_client = ChatClient(self.auth, self.config)
         self.commands: Dict[str, Callable] = {}
         self.running = True
+
+        # Initialize default provider configuration
+        self.config.initialize_default_providers()
 
         # Initialize file indexing system
         self.file_indexer = FileIndexer()
@@ -94,7 +100,7 @@ class InteractiveShell:
             [f"/{cmd}" for cmd in self.commands.keys()] if hasattr(self, "commands") else []
         )
         if not command_list:  # Fallback for initial setup
-            command_list = ["/help", "/exit", "/quit", "/status", "/agent-default", "/clear"]
+            command_list = ["/help", "/exit", "/quit", "/status", "/agent-default", "/clear", "/provider"]
         return WordCompleter(command_list, ignore_case=True)
 
     def _create_key_bindings(self) -> KeyBindings:
@@ -151,6 +157,7 @@ class InteractiveShell:
             "status": self._cmd_status,
             "agent-default": self._cmd_agent_default,
             "clear": self._cmd_clear,
+            "provider": self._cmd_provider,
         }
 
     def _get_prompt_text(self) -> str:
@@ -164,7 +171,17 @@ class InteractiveShell:
         # Agent indicator
         agent_icon = "🤖" if config_status["has_default_agent"] else "❓"
 
-        return f"buddyctl {auth_icon}{agent_icon}> "
+        # Provider indicator
+        current_provider = config_status.get("current_provider", "stackspot")
+        provider_status = self.provider_validator.get_provider_status(current_provider)
+        if provider_status["implemented"] and provider_status["has_credentials"]:
+            provider_icon = "🔮"
+        elif provider_status["implemented"]:
+            provider_icon = "⚠️"
+        else:
+            provider_icon = "❓"
+
+        return f"buddyctl {auth_icon}{provider_icon}{agent_icon}> "
 
     def _parse_command(self, user_input: str) -> tuple[Optional[str], List[str]]:
         """Parse user input into command and arguments."""
@@ -194,6 +211,7 @@ class InteractiveShell:
             "exit/quit": "Exit the interactive shell",
             "status": "Show current authentication and agent status",
             "agent-default": "Set the default agent ID",
+            "provider": "List or change LLM provider",
             "clear": "Clear the screen",
         }
 
@@ -225,6 +243,30 @@ class InteractiveShell:
             realm_info = f" (Realm: {auth_status['realm']})" if auth_status["realm"] else ""
             print_formatted_text(
                 HTML(f"❌ <ansired>Authentication: {auth_status['status']}</ansired>{realm_info}")
+            )
+
+        # LLM Provider status
+        current_provider = config_status.get("current_provider", "stackspot")
+        provider_status = self.provider_validator.get_provider_status(current_provider)
+
+        if provider_status["exists"]:
+            provider_icon = "🔮"
+            if provider_status["implemented"]:
+                creds_status = "✓" if provider_status["has_credentials"] else "⚠️ missing credentials"
+                print_formatted_text(
+                    HTML(
+                        f"{provider_icon} <ansigreen>LLM Provider: {provider_status['display_name']}</ansigreen> ({creds_status})"
+                    )
+                )
+            else:
+                print_formatted_text(
+                    HTML(
+                        f"{provider_icon} <ansiyellow>LLM Provider: {provider_status['display_name']} (not implemented)</ansiyellow>"
+                    )
+                )
+        else:
+            print_formatted_text(
+                HTML(f"🔮 <ansired>LLM Provider: {current_provider} (unknown)</ansired>")
             )
 
         # Agent status
@@ -263,6 +305,91 @@ class InteractiveShell:
         os.system("clear" if os.name == "posix" else "cls")
         # Redisplay banner after clearing
         display_banner(self.auth, self.config)
+
+    def _cmd_provider(self, args: List[str]) -> None:
+        """List or change LLM provider."""
+        # If no arguments, show interactive selection
+        if not args:
+            self._show_provider_selection()
+            return
+
+        # If argument provided, try to set that provider
+        provider_name = args[0].lower()
+        self._set_provider(provider_name)
+
+    def _show_provider_selection(self) -> None:
+        """Show interactive provider selection menu."""
+        providers = self.provider_validator.list_providers(include_unimplemented=True)
+        current_provider = self.config.get_current_provider()
+
+        print_formatted_text(HTML("<b>Available LLM Providers:</b>"))
+        print()
+
+        for idx, provider in enumerate(providers, 1):
+            # Build status indicators
+            indicators = []
+
+            if provider["is_current"]:
+                indicators.append("<ansigreen>current</ansigreen>")
+
+            if provider["implemented"]:
+                indicators.append("<ansigreen>✓</ansigreen>")
+            else:
+                indicators.append("<ansiyellow>not implemented</ansiyellow>")
+
+            if provider["has_credentials"]:
+                indicators.append("<ansigreen>credentials OK</ansigreen>")
+            elif provider["implemented"]:
+                indicators.append("<ansired>missing credentials</ansired>")
+
+            status = " - " + ", ".join(indicators) if indicators else ""
+
+            # Show provider
+            prefix = "→ " if provider["is_current"] else "  "
+            print_formatted_text(
+                HTML(
+                    f"{prefix}<ansiblue>{idx}. {provider['display_name']}</ansiblue> {status}"
+                )
+            )
+
+            # Show description
+            if provider.get("description"):
+                print_formatted_text(HTML(f"     {provider['description']}"))
+
+            # Show missing credentials if any
+            if provider["missing_credentials"] and provider["implemented"]:
+                missing = ", ".join(provider["missing_credentials"])
+                print_formatted_text(HTML(f"     <ansiyellow>Missing: {missing}</ansiyellow>"))
+
+            print()
+
+        print_formatted_text(
+            HTML("<ansicyan>Use: /provider &lt;name&gt; to switch</ansicyan>")
+        )
+        print_formatted_text(
+            HTML(
+                "<ansicyan>Available names: stackspot, openai, anthropic, google, ollama</ansicyan>"
+            )
+        )
+
+    def _set_provider(self, provider_name: str) -> None:
+        """Set the LLM provider."""
+        # Validate and set
+        success, message = self.provider_validator.validate_and_set_provider(provider_name)
+
+        if success:
+            provider_info = ProviderRegistry.get_provider(provider_name)
+            if message:
+                # Warning about missing credentials
+                print_formatted_text(HTML(f"<ansiyellow>⚠️  {message}</ansiyellow>"))
+            print_formatted_text(
+                HTML(
+                    f"<ansigreen>✓ LLM provider set to: {provider_info.display_name}</ansigreen>"
+                )
+            )
+        else:
+            # Error
+            print_formatted_text(HTML(f"<ansired>✗ Error: {message}</ansired>"))
 
     def _execute_command(self, command: str, args: List[str]) -> None:
         """Execute a parsed command."""
