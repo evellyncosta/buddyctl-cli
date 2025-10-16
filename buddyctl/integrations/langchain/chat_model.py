@@ -14,7 +14,9 @@
 
 """LangChain wrapper for StackSpot AI."""
 
-from typing import Any, Dict, Iterator, List, Optional
+import json
+from typing import Any, Callable, Dict, Iterator, List, Optional
+import httpx
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import (
     AIMessage,
@@ -26,7 +28,7 @@ from langchain_core.callbacks import CallbackManagerForLLMRun
 from pydantic import ConfigDict, Field
 
 from ...core.auth import StackSpotAuth
-from ...cli.chat_client import ChatClient
+from ...core.config import BuddyConfig
 from .utils import convert_langchain_messages_to_stackspot
 
 
@@ -72,7 +74,8 @@ class StackSpotChatModel(BaseChatModel):
 
     # Internal clients (not exposed to Pydantic serialization)
     _auth: Optional[StackSpotAuth] = None
-    _chat_client: Optional[ChatClient] = None
+    _config: Optional[BuddyConfig] = None
+    _timeout: int = 300  # 5 minutes
 
     def __init__(self, **kwargs):
         """Initialize the StackSpot chat model.
@@ -82,7 +85,7 @@ class StackSpotChatModel(BaseChatModel):
         """
         super().__init__(**kwargs)
         self._auth = StackSpotAuth()
-        self._chat_client = ChatClient(self._auth)
+        self._config = BuddyConfig()
 
     @property
     def _llm_type(self) -> str:
@@ -105,6 +108,159 @@ class StackSpotChatModel(BaseChatModel):
             "model": self.model,
             "streaming": self.streaming,
         }
+
+    def _get_api_base_url(self) -> str:
+        """Get the StackSpot API base URL."""
+        import os
+        return os.getenv("STACKSPOT_API_URL", "https://genai-inference-app.stackspot.com")
+
+    def _build_url(self, path: str) -> str:
+        """Build API URL for StackSpot.
+
+        Args:
+            path: API endpoint path (e.g., "/v1/agent/{agent_id}/chat")
+
+        Returns:
+            Complete URL with base URL
+        """
+        base_url = self._get_api_base_url()
+        if not path.startswith("/"):
+            path = "/" + path
+        return f"{base_url}{path}"
+
+    def _get_headers(self, streaming: bool = False) -> dict:
+        """Get request headers with authentication.
+
+        Args:
+            streaming: If True, add SSE-specific headers
+
+        Returns:
+            Dictionary with request headers
+        """
+        token = self._auth.get_valid_token()
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+        }
+
+        if streaming:
+            headers.update({
+                "Accept": "text/event-stream",
+                "Cache-Control": "no-cache",
+            })
+
+        return headers
+
+    def _handle_error_response(self, response: httpx.Response) -> None:
+        """Handle HTTP error responses.
+
+        Args:
+            response: HTTP response object
+
+        Raises:
+            httpx.HTTPStatusError: With formatted error message
+        """
+        error_msg = response.text or f"HTTP {response.status_code}"
+
+        if response.status_code == 403:
+            error_msg = "Forbidden - Check your API credentials and permissions"
+        elif response.status_code == 401:
+            error_msg = "Unauthorized - Authentication failed. Try refreshing your token"
+        elif response.status_code == 404:
+            error_msg = f"Agent not found (ID: {self.agent_id})"
+
+        raise httpx.HTTPStatusError(
+            f"API error (status {response.status_code}): {error_msg}",
+            request=response.request,
+            response=response,
+        )
+
+    def _stream_sse(
+        self,
+        url: str,
+        payload: dict,
+        on_chunk: Callable[[str], None]
+    ) -> None:
+        """Stream Server-Sent Events from StackSpot API.
+
+        Args:
+            url: Full API URL
+            payload: Request JSON body
+            on_chunk: Callback function for each message chunk
+
+        Raises:
+            httpx.HTTPStatusError: If API request fails
+        """
+        headers = self._get_headers(streaming=True)
+
+        with httpx.Client(timeout=self._timeout) as client:
+            with client.stream("POST", url, json=payload, headers=headers) as response:
+                if response.status_code != 200:
+                    self._handle_error_response(response)
+
+                for line in response.iter_lines():
+                    if not line or not line.strip():
+                        continue
+
+                    line = line.strip()
+
+                    # SSE format: "data: {json}" or "data: [DONE]"
+                    if line.startswith("data: "):
+                        data = line[6:]  # Remove "data: " prefix
+
+                        # Skip ping/heartbeat messages
+                        if not data or data == ":":
+                            continue
+
+                        # Handle end of stream
+                        if data == "[DONE]":
+                            break
+
+                        try:
+                            # Parse JSON response
+                            response_data = json.loads(data)
+                            message = response_data.get("message", "")
+
+                            # Send message chunk if available
+                            if message:
+                                on_chunk(message)
+
+                            # Check for stop condition
+                            stop_reason = response_data.get("stop_reason")
+                            if stop_reason and stop_reason != "null":
+                                break
+
+                            # Handle errors
+                            error = response_data.get("error")
+                            if error:
+                                raise ValueError(f"API error: {error}")
+
+                        except json.JSONDecodeError:
+                            # If we can't parse as JSON, treat as raw text
+                            on_chunk(data)
+
+    def _post_json(self, url: str, payload: dict) -> dict:
+        """Post JSON request and return JSON response.
+
+        Args:
+            url: Full API URL
+            payload: Request JSON body
+
+        Returns:
+            Response JSON as dictionary
+
+        Raises:
+            httpx.HTTPStatusError: If API request fails
+        """
+        headers = self._get_headers()
+
+        with httpx.Client(timeout=self._timeout) as client:
+            response = client.post(url, json=payload, headers=headers)
+
+            if response.status_code != 200:
+                self._handle_error_response(response)
+
+            return response.json()
 
     def _generate(
         self,
@@ -133,12 +289,21 @@ class StackSpotChatModel(BaseChatModel):
         # Convert LangChain messages to StackSpot format (single string)
         user_prompt = convert_langchain_messages_to_stackspot(messages)
 
+        # Build URL and payload
+        url = self._build_url(f"/v1/agent/{self.agent_id}/chat")
+        payload = {
+            "streaming": False,
+            "user_prompt": user_prompt,
+            "stackspot_knowledge": self.stackspot_knowledge,
+            "return_ks_in_response": self.return_ks_in_response,
+        }
+
         try:
             # Call StackSpot API (non-streaming)
-            response = self._chat_client.chat_non_stream(self.agent_id, user_prompt)
+            response_data = self._post_json(url, payload)
 
             # Convert StackSpot response to LangChain format
-            message = AIMessage(content=response.message)
+            message = AIMessage(content=response_data.get("message", ""))
             generation = ChatGeneration(message=message)
 
             return ChatResult(generations=[generation])
@@ -176,6 +341,15 @@ class StackSpotChatModel(BaseChatModel):
         # Convert messages to StackSpot format
         user_prompt = convert_langchain_messages_to_stackspot(messages)
 
+        # Build URL and payload
+        url = self._build_url(f"/v1/agent/{self.agent_id}/chat")
+        payload = {
+            "streaming": True,
+            "user_prompt": user_prompt,
+            "stackspot_knowledge": self.stackspot_knowledge,
+            "return_ks_in_response": self.return_ks_in_response,
+        }
+
         # Storage for chunks received from streaming
         chunks_buffer = []
 
@@ -193,7 +367,7 @@ class StackSpotChatModel(BaseChatModel):
 
         try:
             # Call StackSpot streaming API
-            self._chat_client.chat_stream(self.agent_id, user_prompt, on_message=on_chunk)
+            self._stream_sse(url, payload, on_chunk)
 
             # Yield all collected chunks as one generation
             # (LangChain streaming can be optimized in future phases)

@@ -17,7 +17,6 @@ from ..core.provider_validator import ProviderValidator
 from ..core.provider_registry import ProviderRegistry
 from ..core.providers import ProviderManager
 from ..ui.banner import display_banner
-from .chat_client import ChatClient
 from ..utils.file_indexer import FileIndexer
 from ..ui.autosuggestion import AutoSuggestionHandler
 from ..utils.file_autocomplete import EnhancedFileAutoCompleter
@@ -34,8 +33,7 @@ class InteractiveShell:
         self.config = BuddyConfig()
         self.validator = AgentValidator(self.auth)
         self.provider_validator = ProviderValidator(self.config)
-        self.chat_client = ChatClient(self.auth, self.config)  # Mantido para compatibilidade
-        self.provider_manager = ProviderManager(self.config, auth=self.auth)  # NEW: Provider abstraction
+        self.provider_manager = ProviderManager(self.config, auth=self.auth)
         self.commands: Dict[str, Callable] = {}
         self.running = True
 
