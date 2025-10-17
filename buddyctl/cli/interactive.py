@@ -1,5 +1,6 @@
 """Interactive CLI shell for buddyctl."""
 
+import logging
 from typing import Dict, Callable, List, Optional
 from prompt_toolkit import PromptSession
 from prompt_toolkit.completion import WordCompleter
@@ -39,6 +40,9 @@ class InteractiveShell:
 
         # Initialize default provider configuration
         self.config.initialize_default_providers()
+
+        # Logging
+        self.logger = logging.getLogger(__name__)
 
         # Initialize file indexing system
         self.file_indexer = FileIndexer()
@@ -158,6 +162,7 @@ class InteractiveShell:
             "agent-default": self._cmd_agent_default,
             "clear": self._cmd_clear,
             "provider": self._cmd_provider,
+            "judge-agent": self._cmd_judge_agent,
         }
 
     def _get_prompt_text(self) -> str:
@@ -212,6 +217,7 @@ class InteractiveShell:
             "status": "Show current authentication and agent status",
             "agent-default": "Set the default agent ID",
             "provider": "List or change LLM provider",
+            "judge-agent": "Set the Judge Agent ID for StackSpot",
             "clear": "Clear the screen",
         }
 
@@ -391,6 +397,50 @@ class InteractiveShell:
             # Error
             print_formatted_text(HTML(f"<ansired>✗ Error: {message}</ansired>"))
 
+    def _cmd_judge_agent(self, args: List[str]) -> None:
+        """Set Judge Agent ID for StackSpot."""
+        if not args:
+            # Show current status
+            judge_agent_id = self.config.get_judge_agent_id()
+            if judge_agent_id:
+                print_formatted_text(
+                    HTML(f"<ansigreen>✓ Judge Agent ID: {judge_agent_id}</ansigreen>")
+                )
+            else:
+                print_formatted_text(HTML("<ansiyellow>Judge Agent ID not configured</ansiyellow>"))
+
+            print()
+            print_formatted_text(HTML("<ansicyan>Usage:</ansicyan>"))
+            print_formatted_text(HTML("  /judge-agent &lt;agent_id&gt;  - Set Judge Agent ID"))
+            print_formatted_text(HTML("  /judge-agent clear           - Remove Judge Agent ID"))
+            print()
+            print_formatted_text(
+                HTML(
+                    "<ansiyellow>💡 Judge Agent enables advanced tool calling for StackSpot</ansiyellow>"
+                )
+            )
+            return
+
+        if args[0].lower() == "clear":
+            self.config.remove_judge_agent_id()
+            print_formatted_text(HTML("<ansigreen>✓ Judge Agent ID removed</ansigreen>"))
+            return
+
+        judge_agent_id = args[0]
+
+        try:
+            self.config.set_judge_agent_id(judge_agent_id)
+            print_formatted_text(
+                HTML(f"<ansigreen>✓ Judge Agent ID set to: {judge_agent_id}</ansigreen>")
+            )
+            print_formatted_text(
+                HTML(
+                    "<ansiyellow>💡 Judge Agent will be used transparently when using StackSpot</ansiyellow>"
+                )
+            )
+        except ConfigurationError as e:
+            print_formatted_text(HTML(f"<ansired>Error: {e}</ansired>"))
+
     def _execute_command(self, command: str, args: List[str]) -> None:
         """Execute a parsed command."""
         if command not in self.commands:
@@ -404,33 +454,44 @@ class InteractiveShell:
             print_formatted_text(HTML(f"<ansired>Error executing command: {e}</ansired>"))
 
     def _send_chat_message(self, message: str) -> None:
-        """Send a chat message using the current provider."""
+        """Send a chat message using the current provider (tools sempre disponíveis)."""
         # Process file references
         processed_message = self._process_file_references(message)
         if processed_message is None:
             return  # Error occurred during file processing
 
         try:
+            # Get tools (sempre disponíveis - Feature 17)
+            from ..integrations.langchain.tools import read_file, apply_diff
+            tools = [read_file, apply_diff]
+
+            # Get provider adapter (Feature 17)
+            current_provider = self.config.get_current_provider()
+            provider_adapter = self.provider_manager.get_adapter(current_provider)
+
+            # Get executor with tools (SEMPRE, transparente)
+            # Provider adapter decide internamente se usa Judge Agent, ReAct, ou native tools
+            executor = provider_adapter.get_model_with_tools(tools=tools)
+
+            # Log request
+            from ..core.logging import log_agent_request, log_agent_response
+            log_agent_request(self.logger, f"{current_provider} executor", processed_message)
+
             # Show loading indicator
             print_formatted_text(
-                HTML("<ansicyan>🤖 buddyctl:</ansicyan> <ansiyellow>⏳ Pensando...</ansiyellow>"),
-                end="",
+                HTML("<ansicyan>🤖 buddyctl:</ansicyan> <ansiyellow>🤔 Pensando...</ansiyellow>")
             )
 
-            # Collect response chunks
-            first_chunk = True
+            # Execute (unified interface - Feature 17)
+            result = executor.invoke(processed_message)
 
-            # Use ProviderManager for provider-agnostic chat
-            for chunk in self.provider_manager.chat_stream(processed_message):
-                # Clear loading indicator on first chunk and show buddyctl label
-                if first_chunk:
-                    print("\r", end="")  # Clear current line
-                    print_formatted_text(HTML("<ansicyan>🤖 buddyctl:</ansicyan> "), end="")
-                    first_chunk = False
+            # Log response
+            log_agent_response(self.logger, f"{current_provider} executor", result["output"])
 
-                print(chunk, end="", flush=True)
-
-            # Add final newline
+            # Clear loading indicator and show result
+            print("\r", end="")
+            print_formatted_text(HTML("<ansigreen>✅ buddyctl:</ansigreen>"))
+            print(result["output"])
             print()
 
         except RuntimeError as e:

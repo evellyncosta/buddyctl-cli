@@ -1,8 +1,9 @@
 """Base protocol and data models for provider adapters."""
 
-from typing import Protocol, Iterator, Optional, runtime_checkable
+from typing import Protocol, Iterator, Optional, runtime_checkable, List, Union, Dict, Any
 from dataclasses import dataclass
 from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_core.tools import BaseTool
 
 
 @dataclass
@@ -112,5 +113,85 @@ class ProviderAdapter(Protocol):
 
         Returns:
             str: Mensagem de erro amigável
+        """
+        ...
+
+    def supports_native_tools(self) -> bool:
+        """
+        Indica se o provider tem suporte nativo a function calling.
+
+        Returns:
+            True: Provider tem API nativa (OpenAI, Anthropic)
+            False: Provider requer estratégia alternativa (StackSpot)
+
+        Example:
+            >>> stackspot_adapter.supports_native_tools()
+            False
+            >>> openai_adapter.supports_native_tools()
+            True
+        """
+        ...
+
+    def get_model_with_tools(
+        self,
+        tools: List[BaseTool]
+    ) -> Union[BaseChatModel, "ExecutorProtocol"]:
+        """
+        Retorna modelo/executor com tools configurados.
+
+        IMPORTANTE: Tool calling é SEMPRE ativo e transparente.
+        Provider decide internamente qual estratégia usar (Judge, Chain, Native).
+
+        Args:
+            tools: Lista de tools disponíveis
+
+        Returns:
+            Executor com interface .invoke(user_input) -> result
+
+        Raises:
+            ValueError: Se provider não está configurado corretamente
+
+        Example:
+            >>> from buddyctl.integrations.langchain.tools import read_file, apply_diff
+            >>> tools = [read_file, apply_diff]
+            >>> executor = provider.get_model_with_tools(tools)
+            >>> result = executor.invoke("Read calculator.py")
+            >>> print(result["output"])
+        """
+        ...
+
+
+@runtime_checkable
+class ExecutorProtocol(Protocol):
+    """
+    Interface comum para executores/chains.
+
+    Tanto JudgeAgentExecutor quanto StackSpotChain implementam esta interface.
+    Permite uso transparente de diferentes estratégias de tool calling.
+
+    Example:
+        >>> executor = provider.get_model_with_tools(tools)
+        >>> result = executor.invoke("Read file and modify")
+        >>> print(result["output"])
+    """
+
+    def invoke(self, user_input: str) -> Dict[str, Any]:
+        """
+        Execute workflow.
+
+        Args:
+            user_input: User request
+
+        Returns:
+            {
+                "output": str,              # Final response
+                "tool_calls_made": List,    # Tools executed
+                "iterations": int           # Number of cycles
+            }
+
+        Example:
+            >>> result = executor.invoke("Read calculator.py")
+            >>> print(result["output"])
+            >>> print(f"Tools used: {len(result['tool_calls_made'])}")
         """
         ...

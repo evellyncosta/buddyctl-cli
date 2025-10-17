@@ -72,6 +72,43 @@ class BuddyConfig:
 
         self._save_config(config)
 
+    def get_judge_agent_id(self) -> Optional[str]:
+        """
+        Get the configured Judge Agent ID for StackSpot.
+
+        Returns:
+            Judge Agent ID or None if not configured
+        """
+        config = self._load_config()
+        return config.get("judge_agent_id")
+
+    def set_judge_agent_id(self, judge_agent_id: str) -> None:
+        """
+        Set the Judge Agent ID for StackSpot two-stage pattern.
+
+        Args:
+            judge_agent_id: StackSpot Judge Agent ID
+
+        Raises:
+            ConfigurationError: If agent ID is empty
+        """
+        if not judge_agent_id or not judge_agent_id.strip():
+            raise ConfigurationError("Judge Agent ID cannot be empty")
+
+        config = self._load_config()
+        config["judge_agent_id"] = judge_agent_id.strip()
+        config["updated_at"] = datetime.now(timezone.utc).isoformat()
+
+        self._save_config(config)
+
+    def remove_judge_agent_id(self) -> None:
+        """Remove the Judge Agent ID configuration."""
+        config = self._load_config()
+        config.pop("judge_agent_id", None)
+        config["updated_at"] = datetime.now(timezone.utc).isoformat()
+
+        self._save_config(config)
+
     def get_current_provider(self) -> str:
         """Get the current LLM provider. Defaults to 'stackspot'."""
         config = self._load_config()
@@ -147,16 +184,72 @@ class BuddyConfig:
             config["updated_at"] = datetime.now(timezone.utc).isoformat()
             self._save_config(config)
 
+    def get_agent_mode(self) -> bool:
+        """Get agent mode setting. Defaults to True."""
+        config = self._load_config()
+        return config.get("agent_mode", True)
+
+    def set_agent_mode(self, enabled: bool) -> None:
+        """Set agent mode (enable/disable ReAct Agent with tools)."""
+        config = self._load_config()
+        config["agent_mode"] = enabled
+        config["updated_at"] = datetime.now(timezone.utc).isoformat()
+        self._save_config(config)
+
+    def get_tool_calling_strategy(self) -> str:
+        """
+        Get the tool calling strategy (Feature 17 architecture).
+
+        Strategies:
+        - "auto" (default): Choose automatically per provider
+        - "native": Force native tool calling (OpenAI/Anthropic only)
+        - "judge": Force Judge Agent (two-stage pattern)
+        - "react": Force ReAct Agent (Feature 14-15)
+
+        Returns:
+            Strategy name, defaults to "auto"
+        """
+        config = self._load_config()
+        return config.get("tool_calling_strategy", "auto")
+
+    def set_tool_calling_strategy(self, strategy: str) -> None:
+        """
+        Set the tool calling strategy.
+
+        Args:
+            strategy: One of "auto", "native", "judge", "react"
+
+        Raises:
+            ConfigurationError: If strategy is invalid
+        """
+        valid_strategies = ["auto", "native", "judge", "react"]
+        strategy = strategy.strip().lower()
+
+        if strategy not in valid_strategies:
+            raise ConfigurationError(
+                f"Invalid strategy '{strategy}'. "
+                f"Must be one of: {', '.join(valid_strategies)}"
+            )
+
+        config = self._load_config()
+        config["tool_calling_strategy"] = strategy
+        config["updated_at"] = datetime.now(timezone.utc).isoformat()
+        self._save_config(config)
+
     def get_config_status(self) -> Dict[str, Any]:
         """Get current configuration status for display."""
         config = self._load_config()
         agent_id = config.get("default_agent_id")
         updated_at = config.get("updated_at")
         current_provider = self.get_current_provider()
+        agent_mode = self.get_agent_mode()
+        strategy = self.get_tool_calling_strategy()
 
         return {
             "has_default_agent": bool(agent_id),
             "default_agent_id": agent_id,
             "current_provider": current_provider,
+            "agent_mode": agent_mode,
+            "tool_calling_strategy": strategy,
             "updated_at": updated_at,
         }

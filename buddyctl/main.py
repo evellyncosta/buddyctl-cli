@@ -1,10 +1,12 @@
 """Main CLI entry point for buddyctl."""
 
+import os
 import typer
 from .core.auth import StackSpotAuth, AuthenticationError
 from .core.config import BuddyConfig, ConfigurationError
 from .cli.agent_validator import AgentValidator, AgentValidationError
 from .cli.interactive import InteractiveShell
+from .core.logging import setup_logging
 
 app = typer.Typer(help="buddyctl - CLI tool for buddy management")
 auth_app = typer.Typer(help="Authentication commands")
@@ -90,8 +92,22 @@ def set_default_agent(agent_id: str) -> None:
 
 
 @app.callback(invoke_without_command=True)
-def main(ctx: typer.Context) -> None:
+def main(
+    ctx: typer.Context,
+    debug: bool = typer.Option(False, "--debug", help="Enable debug mode with detailed logging")
+) -> None:
     """Main entry point for buddyctl CLI."""
+    # Check environment variable for debug mode
+    debug = debug or os.getenv('DEBUG', '').lower() in ('1', 'true', 'yes')
+
+    # Setup logging
+    log_file = setup_logging(debug=debug)
+
+    if debug:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(f"Debug mode enabled - logs available at: {log_file}")
+
     if ctx.invoked_subcommand is None:
         # Start interactive shell
         shell = InteractiveShell()

@@ -2,90 +2,63 @@
 
 CLI tool for managing StackSpot AI assistants (buddies).
 
-## Prerequisites
-
-- Python 3.9 or higher
-- Poetry (Python dependency manager)
-
 ## Installation
 
-1. Clone the repository:
+Install BuddyCtl using pip:
+
 ```bash
-git clone <repository-url>
-cd buddyctl
+pip install buddyctl
 ```
 
-2. Install Poetry (if you haven't already):
+**Verify Installation:**
+
 ```bash
-curl -sSL https://install.python-poetry.org | python3 -
+buddyctl --version
+buddyctl --help
 ```
 
-3. Install the project dependencies:
+**Upgrading:**
+
 ```bash
-poetry install
+pip install --upgrade buddyctl
 ```
-
-This will:
-- Create a virtual environment automatically
-- Install all dependencies from `pyproject.toml`
-- Install the project in editable mode
-- Generate `poetry.lock` for reproducible builds
-
-**Dependencies installed:**
-- typer[all] - CLI framework
-- httpx - HTTP client
-- prompt_toolkit - Interactive prompts
-- langchain ^0.3.27 - LLM framework integration
-- langchain-core ^0.3.27 - LangChain core components
-- pydantic ^2.0.0 - Data validation
 
 ## Configuration
 
-1. Copy the environment variables template:
-```bash
-cp .env.example .env
-```
+Create a `.env` file in your project directory with your StackSpot credentials:
 
-2. Edit `.env` file with your StackSpot credentials:
 ```env
+# Required: StackSpot Authentication
 STACKSPOT_CLIENT_ID=your_client_id_here
 STACKSPOT_CLIENT_SECRET=your_client_secret_here
 STACKSPOT_REALM=your_realm_here
+
+# Optional: Default Agent ID
+STACKSPOT_CODER_ID=your_agent_id_here
 ```
 
-You can generate these credentials in your StackSpot account.
+**Where to get credentials:**
+- Generate your credentials in your [StackSpot account](https://stackspot.com)
+- Find your agent ID in the StackSpot AI dashboard
 
-## Running the Project
+## Usage
 
-After installation and configuration, run the CLI tool using Poetry:
+After installation and configuration, use BuddyCtl directly:
 
 ```bash
 # Run the interactive shell
-poetry run buddyctl
-
-# Or use specific commands
-poetry run buddyctl auth status
-poetry run buddyctl auth login
-poetry run buddyctl agent-default <agent_id>
-poetry run buddyctl --help
-```
-
-### Optional: Create an alias for easier access
-
-Add to your `~/.bashrc` or `~/.zshrc`:
-```bash
-alias buddyctl='poetry run buddyctl'
-```
-
-Then reload your shell:
-```bash
-source ~/.bashrc  # or source ~/.zshrc
-```
-
-Now you can use directly:
-```bash
 buddyctl
+
+# Check authentication status
 buddyctl auth status
+
+# Login with your credentials
+buddyctl auth login
+
+# Set default agent
+buddyctl agent-default <agent_id>
+
+# Show help
 buddyctl --help
 ```
 
@@ -103,30 +76,31 @@ buddyctl --help
 ### Authentication
 ```bash
 # Login with your credentials
-poetry run buddyctl auth login
+buddyctl auth login
 
 # Check authentication status
-poetry run buddyctl auth status
+buddyctl auth status
 
 # Logout
-poetry run buddyctl auth logout
+buddyctl auth logout
 ```
 
 ### Setting Default Agent
 ```bash
 # Set the default agent for conversations
-poetry run buddyctl agent-default <your-agent-id>
+buddyctl agent-default <your-agent-id>
 ```
 
 ### Interactive Shell
 ```bash
 # Start the interactive shell
-poetry run buddyctl
+buddyctl
 
 # Inside the shell:
 /help              # Show available commands
 /status            # Check auth and agent status
 /agent-default <id> # Set default agent
+/provider          # List or change LLM provider
 /clear             # Clear screen
 /exit              # Exit shell
 
@@ -139,7 +113,30 @@ Can you review @src/main.py and suggest improvements?
 
 ## Development
 
-The project uses Poetry for dependency management and packaging.
+For contributors and developers who want to work on BuddyCtl itself:
+
+### Setup Development Environment
+
+1. Clone the repository:
+```bash
+git clone https://github.com/evellyncosta/buddyctl-cli
+cd buddyctl-cli
+```
+
+2. Install Poetry:
+```bash
+curl -sSL https://install.python-poetry.org | python3 -
+```
+
+3. Install dependencies:
+```bash
+poetry install
+```
+
+4. Run in development mode:
+```bash
+poetry run buddyctl
+```
 
 ### Useful Poetry commands:
 
@@ -246,29 +243,32 @@ buddyctl-cli/
 BuddyCtl can be used as a library in other Python projects:
 
 ```python
-# Install from PyPI (when published)
+# Install from PyPI
 pip install buddyctl
 
 # Or install from git
-pip install git+https://github.com/yourusername/buddyctl-cli.git
+pip install git+https://github.com/evellyncosta/buddyctl-cli.git
 
 # Use the LangChain integration
-from buddyctl.integrations.langchain import StackSpotChatModel, create_coder_differ_chain
+from buddyctl.integrations.langchain import StackSpotChatModel, create_coder_chain
 
 # Create a StackSpot chat model
 model = StackSpotChatModel(agent_id="your-agent-id")
 response = model.invoke("Explain Python decorators")
 
-# Or use orchestration chains
-chain = create_coder_differ_chain(
-    coder_agent_id="coder-123",
-    differ_agent_id="differ-456"
+# Or use chains to generate and apply diffs
+chain = create_coder_chain(
+    agent_id="your-agent-id",
+    auto_apply=True  # Automatically applies the diff to the file
 )
 
 result = chain.invoke({
     "file_path": "src/main.py",
     "instruction": "Add error handling"
 })
+
+print(result["diff"])  # Shows the unified diff
+print(result["apply_result"])  # Shows if the diff was applied successfully
 ```
 
 ## Troubleshooting

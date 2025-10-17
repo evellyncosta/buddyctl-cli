@@ -56,19 +56,27 @@ class ProviderManager:
             # "anthropic": AnthropicAdapter(self.config),
         }
 
-    def get_current_adapter(self) -> ProviderAdapter:
+    def get_adapter(self, provider_name: str) -> ProviderAdapter:
         """
-        Retorna o adapter do provider atualmente configurado.
+        Get adapter for specified provider (Feature 17).
+
+        Args:
+            provider_name: Provider name (stackspot, openai, etc.)
 
         Returns:
-            ProviderAdapter: Adapter do provider atual
+            ProviderAdapter instance
 
         Raises:
-            ValueError: Se provider é desconhecido ou não disponível
-            TypeError: Se adapter não implementa ProviderAdapter protocol
-        """
-        provider_name = self.config.get_current_provider()
+            ValueError: If provider not found or not available
+            TypeError: If adapter doesn't implement ProviderAdapter protocol
 
+        Example:
+            >>> manager = ProviderManager(config)
+            >>> adapter = manager.get_adapter("stackspot")
+            >>> tools = [read_file, apply_diff]
+            >>> executor = adapter.get_model_with_tools(tools)
+            >>> result = executor.invoke("Read file")
+        """
         if provider_name not in self._adapters:
             available = ", ".join(self._adapters.keys())
             raise ValueError(
@@ -79,7 +87,6 @@ class ProviderManager:
         adapter = self._adapters[provider_name]
 
         # Validação opcional em runtime (graças ao @runtime_checkable)
-        # Type checker já valida em tempo de desenvolvimento!
         if not isinstance(adapter, ProviderAdapter):
             raise TypeError(
                 f"Adapter '{provider_name}' doesn't implement ProviderAdapter protocol"
@@ -92,6 +99,20 @@ class ProviderManager:
             )
 
         return adapter
+
+    def get_current_adapter(self) -> ProviderAdapter:
+        """
+        Retorna o adapter do provider atualmente configurado.
+
+        Returns:
+            ProviderAdapter: Adapter do provider atual
+
+        Raises:
+            ValueError: Se provider é desconhecido ou não disponível
+            TypeError: Se adapter não implementa ProviderAdapter protocol
+        """
+        provider_name = self.config.get_current_provider()
+        return self.get_adapter(provider_name)
 
     def chat_stream(
         self,

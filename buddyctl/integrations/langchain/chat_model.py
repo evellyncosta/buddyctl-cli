@@ -15,6 +15,7 @@
 """LangChain wrapper for StackSpot AI."""
 
 import json
+import logging
 from typing import Any, Callable, Dict, Iterator, List, Optional
 import httpx
 from langchain_core.language_models.chat_models import BaseChatModel
@@ -75,7 +76,7 @@ class StackSpotChatModel(BaseChatModel):
     # Internal clients (not exposed to Pydantic serialization)
     _auth: Optional[StackSpotAuth] = None
     _config: Optional[BuddyConfig] = None
-    _timeout: int = 300  # 5 minutes
+    _logger: Optional[logging.Logger] = None
 
     def __init__(self, **kwargs):
         """Initialize the StackSpot chat model.
@@ -86,6 +87,7 @@ class StackSpotChatModel(BaseChatModel):
         super().__init__(**kwargs)
         self._auth = StackSpotAuth()
         self._config = BuddyConfig()
+        self._logger = logging.getLogger(__name__)
 
     @property
     def _llm_type(self) -> str:
@@ -151,6 +153,33 @@ class StackSpotChatModel(BaseChatModel):
 
         return headers
 
+    def _get_timeout_config(self, streaming: bool = False) -> httpx.Timeout:
+        """Get timeout configuration for httpx client.
+
+        Args:
+            streaming: If True, configure for SSE streaming (no read timeout between chunks)
+
+        Returns:
+            httpx.Timeout object with appropriate settings
+
+        Note:
+            For streaming, we use read=None to avoid timeout between SSE chunks.
+            The StackSpot API can take time to generate tokens, and setting a read
+            timeout would close the connection prematurely.
+        """
+        if streaming:
+            # For streaming: no timeout between chunks
+            # Only timeout on initial connection
+            return httpx.Timeout(
+                connect=30.0,    # 30s to establish connection
+                read=None,       # No timeout between SSE chunks (infinite)
+                write=30.0,      # 30s to write request
+                pool=30.0        # 30s for connection pool
+            )
+        else:
+            # For non-streaming: standard 30s timeout for everything
+            return httpx.Timeout(30.0)
+
     def _handle_error_response(self, response: httpx.Response) -> None:
         """Handle HTTP error responses.
 
@@ -193,7 +222,10 @@ class StackSpotChatModel(BaseChatModel):
         """
         headers = self._get_headers(streaming=True)
 
-        with httpx.Client(timeout=self._timeout) as client:
+        # Use streaming-specific timeout configuration (no read timeout between chunks)
+        timeout = self._get_timeout_config(streaming=True)
+
+        with httpx.Client(timeout=timeout) as client:
             with client.stream("POST", url, json=payload, headers=headers) as response:
                 if response.status_code != 200:
                     self._handle_error_response(response)
@@ -254,7 +286,10 @@ class StackSpotChatModel(BaseChatModel):
         """
         headers = self._get_headers()
 
-        with httpx.Client(timeout=self._timeout) as client:
+        # Use non-streaming timeout configuration
+        timeout = self._get_timeout_config(streaming=False)
+
+        with httpx.Client(timeout=timeout) as client:
             response = client.post(url, json=payload, headers=headers)
 
             if response.status_code != 200:
@@ -289,6 +324,9 @@ class StackSpotChatModel(BaseChatModel):
         # Convert LangChain messages to StackSpot format (single string)
         user_prompt = convert_langchain_messages_to_stackspot(messages)
 
+        self._logger.debug(f"StackSpotChatModel: Calling agent {self.agent_id}")
+        self._logger.debug(f"User prompt: {user_prompt[:200]}...")
+
         # Build URL and payload
         url = self._build_url(f"/v1/agent/{self.agent_id}/chat")
         payload = {
@@ -303,12 +341,16 @@ class StackSpotChatModel(BaseChatModel):
             response_data = self._post_json(url, payload)
 
             # Convert StackSpot response to LangChain format
-            message = AIMessage(content=response_data.get("message", ""))
+            message_content = response_data.get("message", "")
+            self._logger.debug(f"StackSpot response: {message_content[:200]}...")
+
+            message = AIMessage(content=message_content)
             generation = ChatGeneration(message=message)
 
             return ChatResult(generations=[generation])
 
         except Exception as e:
+            self._logger.error(f"StackSpot API error: {str(e)}")
             raise ValueError(f"StackSpot API error: {str(e)}")
 
     def _stream(

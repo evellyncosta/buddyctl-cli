@@ -4,18 +4,21 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry]
 name = "buddyctl"
-version = "0.1.0"
+version = "0.0.1"
 description = "CLI tool for managing StackSpot AI assistants (buddies)"
-authors = ["Evellyn"]
+authors = ["Evellyn <ecosta.inf@gmail.com>"]
 license = "Apache-2.0"
 readme = "README.md"
-homepage = "https://github.com/yourusername/buddyctl"
-repository = "https://github.com/yourusername/buddyctl"
-keywords = ["cli", "stackspot", "ai", "assistant", "chat"]
+homepage = "https://github.com/evellyncosta/buddyctl-cli"
+repository = "https://github.com/evellyncosta/buddyctl-cli"
+documentation = "https://github.com/evellyncosta/buddyctl-cli#readme"
+keywords = ["cli", "stackspot", "ai", "assistant", "chat", "langchain"]
 classifiers = [
     "Development Status :: 3 - Alpha",
+    "Environment :: Console",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
@@ -24,6 +27,8 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 packages = [{include = "buddyctl"}]
+include = ["README.md", "LICENSE", ".env.example"]
+exclude = ["tests/*", ".doc/*", ".github/*"]
 
 [tool.poetry.dependencies]
 python = "^3.9"
