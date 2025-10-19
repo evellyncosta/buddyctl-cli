@@ -55,21 +55,36 @@ class BaseChain:
 
         Common implementation shared by all provider chains.
         """
+        import logging
+        logger = logging.getLogger(__name__)
+
+        logger.debug(f"_execute_tools called with {len(tool_calls)} tool call(s)")
+        logger.debug(f"Available tools: {list(self.tools.keys())}")
+
         results = {}
 
-        for call in tool_calls:
+        for idx, call in enumerate(tool_calls):
             tool_name = call.get("name")
             tool_args = call.get("args", {})
 
+            logger.debug(f"Tool call [{idx+1}]: name={tool_name}, args={tool_args}")
+
             if tool_name not in self.tools:
-                results[tool_name] = f"Error: Tool '{tool_name}' not found"
+                error_msg = f"Error: Tool '{tool_name}' not found"
+                logger.error(error_msg)
+                results[tool_name] = error_msg
                 continue
 
             try:
                 tool = self.tools[tool_name]
+                logger.debug(f"Invoking tool: {tool_name}")
                 result = tool.invoke(tool_args)
+                logger.debug(f"Tool {tool_name} result: {result[:200] if len(str(result)) > 200 else result}")
                 results[tool_name] = str(result)
             except Exception as e:
-                results[tool_name] = f"Error executing {tool_name}: {e}"
+                error_msg = f"Error executing {tool_name}: {e}"
+                logger.error(error_msg)
+                results[tool_name] = error_msg
 
+        logger.debug(f"_execute_tools completed. Results: {list(results.keys())}")
         return results

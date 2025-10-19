@@ -128,11 +128,17 @@ def parse_unified_diff(diff_content: str) -> FileDiff:
             old_path = line[4:].strip()
             if old_path.startswith('a/'):
                 old_path = old_path[2:]
+            # Remove @ prefix if present (file reference syntax)
+            if old_path.startswith('@'):
+                old_path = old_path[1:]
         elif line.startswith('+++'):
             # Extract path, removing 'b/' prefix if present
             new_path = line[4:].strip()
             if new_path.startswith('b/'):
                 new_path = new_path[2:]
+            # Remove @ prefix if present (file reference syntax)
+            if new_path.startswith('@'):
+                new_path = new_path[1:]
         elif line.startswith('@@'):
             # Save previous hunk if exists
             if current_hunk_lines:
@@ -171,8 +177,11 @@ def apply_hunk(file_lines: List[str], hunk: Hunk) -> List[str]:
         ValueError: If hunk cannot be applied (context doesn't match)
     """
     # Find the position to apply the hunk
-    # Start searching from old_start - 1 (0-indexed)
-    search_start = max(0, hunk.old_start - 1)
+    # Use fuzzy search window: ±5 lines from expected position
+    SEARCH_WINDOW = 5
+    expected_position = max(0, hunk.old_start - 1)  # 0-indexed
+    search_start = max(0, expected_position - SEARCH_WINDOW)
+    search_end = min(len(file_lines), expected_position + SEARCH_WINDOW + 1)
 
     # Extract context and operations from hunk
     context_lines = []
@@ -183,8 +192,9 @@ def apply_hunk(file_lines: List[str], hunk: Hunk) -> List[str]:
             context_lines.append(content)
 
     # Try to find matching context in the file
+    # Strategy 1: Try within search window first (±5 lines)
     found_position = None
-    for i in range(search_start, len(file_lines)):
+    for i in range(search_start, search_end):
         match = True
         context_idx = 0
         for op, content in operations:
@@ -200,10 +210,28 @@ def apply_hunk(file_lines: List[str], hunk: Hunk) -> List[str]:
             found_position = i
             break
 
+    # Strategy 2: If not found, search entire file as fallback
+    if found_position is None:
+        for i in range(0, len(file_lines)):
+            match = True
+            context_idx = 0
+            for op, content in operations:
+                if op in (' ', '-'):
+                    if i + context_idx >= len(file_lines):
+                        match = False
+                        break
+                    if file_lines[i + context_idx] != content:
+                        match = False
+                        break
+                    context_idx += 1
+            if match:
+                found_position = i
+                break
+
     if found_position is None:
         raise ValueError(
             f"Hunk at line {hunk.old_start} does not match the file content.\n"
-            "Expected context not found."
+            f"Expected context not found in entire file."
         )
 
     # Apply the hunk

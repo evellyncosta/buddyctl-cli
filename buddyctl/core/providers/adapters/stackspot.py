@@ -286,9 +286,7 @@ class StackSpotAdapter:
         return StackSpotChain(
             main_agent_id=main_agent_id,
             judge_agent_id=judge_agent_id,
-            tools=tools,
-            max_iterations=3,
-            refine_with_results=True
+            tools=tools
         )
 
     def _create_react_executor(self, tools: List[BaseTool]) -> "AgentExecutor":

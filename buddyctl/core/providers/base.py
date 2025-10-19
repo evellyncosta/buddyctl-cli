@@ -166,7 +166,7 @@ class ExecutorProtocol(Protocol):
     """
     Interface comum para executores/chains.
 
-    Tanto JudgeAgentExecutor quanto StackSpotChain implementam esta interface.
+    Chains (StackSpotChain, ReActExecutor) e AgentExecutor implementam esta interface.
     Permite uso transparente de diferentes estratégias de tool calling.
 
     Example:
