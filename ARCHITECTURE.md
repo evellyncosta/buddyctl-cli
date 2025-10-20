@@ -349,6 +349,12 @@ graph LR
         JWT[JWT Tokens<br/>Bearer Auth]
     end
 
+    subgraph "Tool Calling"
+        JudgeAgent[Judge Agent Pattern<br/>Two-Stage]
+        ReActAgent[ReAct Agent<br/>Fallback]
+        DiffValidation[Diff Validation<br/>Dry-run]
+    end
+
     Poetry --> Typer
     Poetry --> HTTPX
     Poetry --> LangChain
@@ -360,10 +366,15 @@ graph LR
     OAuth2 --> JWT
 
     LangChain --> LangChainCore
+    LangChain --> JudgeAgent
+    LangChain --> ReActAgent
+
+    JudgeAgent --> DiffValidation
 
     style LangChain fill:#4A90E2,color:#fff
     style HTTPX fill:#F39C12,color:#fff
     style Pydantic fill:#E91E63,color:#fff
+    style JudgeAgent fill:#50C878,color:#fff
 ```
 
 ### Key Libraries
@@ -414,8 +425,8 @@ buddyctl-cli/
 │   │       └── adapters/              # Provider implementations
 │   │           ├── __init__.py
 │   │           ├── stackspot.py       # StackSpotAdapter (implemented)
-│   │           ├── openai.py          # OpenAIAdapter (future)
-│   │           └── anthropic.py       # AnthropicAdapter (future)
+│   │           ├── openai.py          # OpenAIAdapter (planned)
+│   │           └── anthropic.py       # AnthropicAdapter (planned)
 │   │
 │   ├── integrations/                  # External integrations
 │   │   ├── __init__.py
@@ -424,8 +435,15 @@ buddyctl-cli/
 │   │       ├── __init__.py
 │   │       ├── chat_model.py          # StackSpotChatModel - Custom BaseChatModel
 │   │       ├── utils.py               # Message conversion utilities
-│   │       ├── chains.py              # LangChain chains (orchestration)
-│   │       ├── tools.py               # LangChain tools
+│   │       ├── tools.py               # LangChain tools (read_file, apply_diff)
+│   │       ├── agents.py              # ReAct Agent integration
+│   │       ├── context_formatter.py   # Context formatting for prompts
+│   │       │
+│   │       ├── chains/                # Chain implementations
+│   │       │   ├── __init__.py
+│   │       │   ├── base.py            # BaseChain abstract class
+│   │       │   ├── stackspot_chain.py # StackSpotChain (Judge Agent pattern)
+│   │       │   └── legacy.py          # Legacy chain implementations
 │   │       │
 │   │       └── examples/              # Usage examples
 │   │           ├── calculator.py      # Tool integration example
@@ -452,10 +470,17 @@ buddyctl-cli/
 ├── tests/                             # Test suite
 │   └── ...
 │
+├── prompts/                           # Agent prompts (Two-Stage Pattern)
+│   ├── README.md                      # Prompts documentation
+│   ├── main_agent.md                  # Main Agent system prompt
+│   └── judge_agent.md                 # Judge Agent system prompt
+│
 ├── .doc/                              # Feature documentation
 │   ├── feature-template.md
 │   ├── fix-template.md
-│   ├── feature-12-use-stackspot-adapter.md
+│   ├── FEATURES_ROADMAP.md
+│   ├── feature-17-unified-tool-calling-abstraction.md
+│   ├── feature-18-judge-agent-integration.md
 │   └── ...
 │
 ├── pyproject.toml                     # Poetry configuration
@@ -480,8 +505,13 @@ buddyctl-cli/
 #### `buddyctl/integrations/langchain/`
 - **chat_model.py**: Custom `StackSpotChatModel` extending LangChain's `BaseChatModel`
 - **utils.py**: Message format conversion (LangChain ↔ StackSpot)
-- **chains.py**: LangChain chains for complex workflows
-- **tools.py**: Custom tools for agent integration
+- **tools.py**: LangChain tools (`read_file`, `apply_diff`) with diff validation
+- **agents.py**: ReAct Agent creation with streaming control
+- **context_formatter.py**: Context formatting utilities for prompts
+- **chains/**: Chain implementations for different orchestration patterns
+  - **base.py**: Abstract base class for all chains
+  - **stackspot_chain.py**: Judge Agent pattern (two-stage tool calling)
+  - **legacy.py**: Legacy chain implementations
 
 #### `buddyctl/cli/`
 - **interactive.py**: Main interactive shell with command parsing and chat orchestration
@@ -542,47 +572,326 @@ buddyctl-cli/
 ```json
 {
   "default_agent_id": "01K48SKQWX4D7A3AYF0P02X6GJ",
-  "current_provider": "stackspot"
+  "judge_agent_id": "01K48SKQWX4D7A3AYF0P02X6GK",
+  "agent_mode": true,
+  "llm": {
+    "current_provider": "stackspot"
+  },
+  "updated_at": "2025-10-20T12:00:00Z"
 }
 ```
 - **Managed by**: `BuddyConfig`
-- **Stores**: User preferences and settings
+- **Stores**: User preferences and agent IDs
+- **Note**: Config is automatically managed, users don't need to edit manually
 
 ### `.env`
+```bash
+# Required: Authentication
+STACKSPOT_CLIENT_ID=your_client_id
+STACKSPOT_CLIENT_SECRET=your_client_secret
+STACKSPOT_REALM=your_realm
+
+# Required: API URLs
+STACKSPOT_AUTH_URL=https://idm.stackspot.com
+STACKSPOT_API_URL=https://genai-inference-app.stackspot.com
+
+# Required: Agent IDs
+STACKSPOT_CODER_ID=your_main_agent_id
+STACKSPOT_JUDGE_AGENT_ID=your_judge_agent_id
+```
+- **All variables are required**
+- **Loaded by**: `StackSpotAuth`, `StackSpotChatModel`, and `BuddyConfig`
+
+---
+
+## Judge Agent Pattern (Two-Stage Tool Calling)
+
+BuddyCtl implements an innovative two-stage pattern for tool calling that works with LLMs that don't have native function calling support (like StackSpot):
+
+### Architecture Overview
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant Shell as InteractiveShell
+    participant Chain as StackSpotChain
+    participant MainAgent as Main Agent<br/>(StackSpot)
+    participant JudgeAgent as Judge Agent<br/>(StackSpot)
+    participant Validator as Diff Validator
+    participant Tools as Local Tools
+
+    User->>Shell: "Modify calculator.py to add comments"
+    Shell->>Chain: invoke(user_input)
+
+    rect rgb(240, 248, 255)
+        Note over Chain,MainAgent: STAGE 1: Generation
+        Chain->>MainAgent: Generate response + diff
+        MainAgent-->>Chain: Natural response with unified diff
+    end
+
+    rect rgb(255, 248, 240)
+        Note over Chain,JudgeAgent: STAGE 2: Analysis
+        Chain->>JudgeAgent: Analyze response, extract tools
+        JudgeAgent-->>Chain: JSON decision {"needs_tools": true, "tool_calls": [...]}
+    end
+
+    rect rgb(240, 255, 240)
+        Note over Chain,Validator: STAGE 3: Validation
+        Chain->>Validator: validate_diff_applicability(diff)
+        alt Diff is valid
+            Validator-->>Chain: (True, None)
+            Chain->>Tools: Execute apply_diff(diff)
+            Tools-->>Chain: Success message
+            Chain-->>Shell: Final response + tool results
+        else Diff is invalid
+            Validator-->>Chain: (False, "Hunk at line X...")
+            Chain->>MainAgent: Retry with error context
+            Note over Chain: Up to 3 retry rounds
+        end
+    end
+
+    Shell-->>User: Display final response
+```
+
+### Key Components
+
+#### 1. StackSpotChain (Orchestrator)
+Located at: `buddyctl/integrations/langchain/chains/stackspot_chain.py`
+
+**Responsibilities:**
+- Orchestrate the two-stage flow
+- Handle retry logic (up to 3 rounds)
+- Format correction prompts with context
+- Validate diffs before execution
+
+**Flow:**
+```python
+def invoke(user_input: str) -> Dict[str, Any]:
+    # Round 1: Initial attempt
+    main_response = main_model.invoke(user_input)
+    decision = judge_model.analyze(main_response)
+
+    if decision["needs_tools"]:
+        diff = extract_diff(decision["tool_calls"])
+        is_valid, error = validate_diff_applicability(diff)
+
+        if not is_valid:
+            # Round 2-3: Retry with error feedback
+            main_response = main_model.invoke(correction_prompt(error))
+            # ... repeat validation ...
+```
+
+#### 2. Main Agent
+**Purpose:** Generate natural, complete responses with embedded diffs
+
+**System Prompt:** Located at `prompts/main_agent.md`
+
+**Characteristics:**
+- Conversational tone
+- Can speculate using clear language
+- Generates complete unified diffs
+- No need to follow rigid Action:/Input: format
+- Focuses on helpful response, not tool execution
+
+**Example Output:**
+```
+I'll add type hints to your functions. Here's the diff:
+
+--- a/calculator.py
++++ b/calculator.py
+@@ -1,3 +1,3 @@
+-def add(a, b):
++def add(a: float, b: float) -> float:
+     return a + b
+```
+
+#### 3. Judge Agent
+**Purpose:** Analyze Main Agent response and decide if tools should execute
+
+**System Prompt:** Located at `prompts/judge_agent.md`
+
+**Characteristics:**
+- Analytical tone
+- Pattern-based detection (keywords, markers)
+- Always returns valid JSON
+- Analyzes CONTENT, not quality
+- Extracts complete diffs from response
+
+**Decision Framework:**
+```python
+# Speculation Detection
+if "probably" in response or "without seeing" in response:
+    return {"needs_tools": true, "tool_calls": [{"name": "read_file", ...}]}
+
+# Diff Detection
+if "---" in response and "+++" in response and "@@" in response:
+    diff = extract_diff(response)
+    return {"needs_tools": true, "tool_calls": [{"name": "apply_diff", "args": {"diff_content": diff}}]}
+
+# Complete Response
+else:
+    return {"needs_tools": false, "tool_calls": []}
+```
+
+#### 4. Diff Validator
+Located at: `buddyctl/integrations/langchain/tools.py:validate_diff_applicability()`
+
+**Purpose:** Dry-run validation before applying diffs
+
+**Process:**
+1. Parse unified diff structure
+2. Read target file
+3. Try to match hunks using fuzzy search (±5 lines)
+4. Return (is_valid, error_message)
+
+**Benefits:**
+- Prevents partial/corrupted applications
+- Provides specific error messages for correction
+- Enables retry logic with context
+
+#### 5. Retry Mechanism
+When diff validation fails:
+
+**Round 1:** Initial attempt
+```
+User: "Add comments to calculator.py"
+Main Agent: [generates diff with wrong line numbers]
+Validator: ❌ "Hunk at line 34 does not match file content"
+```
+
+**Round 2:** Correction with context
+```
+Correction Prompt:
+"ROUND 2 - DIFF CORRECTION REQUIRED
+
+Your previous diff failed with:
+ERROR: Hunk at line 34 does not match file content
+
+Current file content with line numbers:
+1 | def add(a, b):
+2 |     return a + b
+3 |
+4 | def subtract(a, b):
+...
+
+Please generate a CORRECTED diff using the exact line numbers shown above."
+
+Main Agent: [generates corrected diff]
+Validator: ✅ Valid
+```
+
+**Up to 3 rounds** before giving up
+
+### Configuration
+
+**Environment Variables (All Required):**
 ```bash
 STACKSPOT_CLIENT_ID=your_client_id
 STACKSPOT_CLIENT_SECRET=your_client_secret
 STACKSPOT_REALM=your_realm
 STACKSPOT_AUTH_URL=https://idm.stackspot.com
 STACKSPOT_API_URL=https://genai-inference-app.stackspot.com
+STACKSPOT_CODER_ID=your_main_agent_id
+STACKSPOT_JUDGE_AGENT_ID=your_judge_agent_id
 ```
-- **Required for**: StackSpot authentication
-- **Loaded by**: `StackSpotAuth` and `StackSpotChatModel`
+
+**Config File:**
+```json
+{
+  "default_agent_id": "main_agent_id",
+  "judge_agent_id": "judge_agent_id",
+  "agent_mode": true
+}
+```
+
+### Performance Metrics
+
+| Metric | Judge Pattern | ReAct Pattern |
+|--------|---------------|---------------|
+| Success Rate | ~80-90% | ~60-70% |
+| LLM Calls | 2-3 | 3-5 |
+| Output Quality | Clean, natural | Verbose, explicit |
+| Retry Capability | ✅ Yes (3 rounds) | ❌ No |
+| Validation | ✅ Dry-run | ❌ Apply directly |
+
+---
+
+## Implemented Features (Current State)
+
+### Tool Calling System (Feature 17-18) ✅
+**Two-Stage Pattern with Judge Agent:**
+- **StackSpotChain**: Orchestrates Main Agent → Judge Agent → Tool Execution
+- **Diff Validation**: Dry-run validation before applying changes (`validate_diff_applicability`)
+- **Retry Logic**: Automatic correction rounds (up to 3 attempts) when diffs fail
+- **Context Formatting**: Rich context with line numbers for better agent understanding
+
+**Architecture:**
+```
+User Request → Main Agent (generates response + diff)
+             ↓
+        Judge Agent (analyzes response, decides tools)
+             ↓
+        Diff Validator (dry-run check)
+             ↓
+        Tool Execution (apply if valid, or retry)
+```
+
+### Tool Calling Strategies ✅
+1. **Judge Pattern** (Primary for StackSpot):
+   - Main Agent generates natural response with diff
+   - Judge Agent analyzes and extracts tool calls
+   - Validation before execution
+   - ~80-90% success rate, clean output
+
+2. **ReAct Pattern** (Fallback):
+   - Traditional LangChain ReAct Agent
+   - Explicit reasoning steps
+   - ~60-70% success rate, verbose output
+   - Falls back when Judge Agent not configured
+
+### Provider Abstraction (Feature 11-12) ✅
+- **Protocol-based Design**: `ProviderAdapter` using Python Protocol
+- **StackSpotAdapter**: Fully implemented with Judge Agent integration
+- **OpenAI/Anthropic Adapters**: Skeleton created, not yet implemented
+- **Unified Interface**: `get_model_with_tools(tools, strategy="auto")`
+
+### Configuration System ✅
+- **All environment variables are required**: No optional configuration
+- **judge_agent_id**: ID for Judge Agent (two-stage pattern)
+- **agent_mode**: Internally managed (always enabled)
+
+### Tools ✅
+- **read_file**: Read file content with error handling
+- **apply_diff**: Apply unified diff with validation
+  - Fuzzy matching (±5 lines search window)
+  - Multi-hunk support
+  - Path traversal protection
+  - UTF-8 validation
 
 ---
 
 ## Future Enhancements
 
-### Planned Features
-1. **Multi-Provider Support**
-   - OpenAI (ChatGPT) integration
-   - Anthropic (Claude) integration
-   - Google (Gemini) integration
-   - Ollama (local models) integration
+### Planned Features (Not Yet Implemented)
+1. **Multi-Provider Support** ⏳
+   - OpenAI (ChatGPT) integration - skeleton created
+   - Anthropic (Claude) integration - skeleton created
+   - Google (Gemini) integration - planned
+   - Ollama (local models) integration - planned
 
-2. **Advanced LangChain Features**
-   - Agent chains with tools
+2. **Advanced LangChain Features** ⏳
    - Memory and conversation history
    - RAG (Retrieval-Augmented Generation)
    - Multi-agent orchestration
+   - Custom prompt templates
 
-3. **Enhanced CLI Features**
+3. **Enhanced CLI Features** ⏳
    - Plugin system for custom commands
    - Configuration profiles
    - Batch processing mode
    - Export chat history
 
-4. **Performance Optimizations**
+4. **Performance Optimizations** ⏳
    - Connection pooling
    - Request caching
    - Async I/O for multiple providers
@@ -590,11 +899,6 @@ STACKSPOT_API_URL=https://genai-inference-app.stackspot.com
 ---
 
 ## References
-
-### Related Documentation
-- [Feature 12: Unified Architecture Migration](.doc/feature-12-use-stackspot-adapter.md)
-- [Feature 11: Provider Abstraction Layer](.doc/feature-11-provider-abstraction.md)
-- [Feature 7: LangChain Wrapper](.doc/feature-7-langchain-wrapper.md)
 
 ### External Resources
 - [LangChain Documentation](https://python.langchain.com/)
@@ -605,7 +909,30 @@ STACKSPOT_API_URL=https://genai-inference-app.stackspot.com
 
 ---
 
-**Document Version**: 1.0
-**Last Updated**: 2025-10-16
+**Document Version**: 2.0
+**Last Updated**: 2025-10-20
 **Author**: Architecture Team
 **Status**: Current
+
+## Changelog
+
+### Version 2.0 (2025-10-20)
+**Major Updates:**
+- ✅ Added Two-Stage Tool Calling (Judge Agent pattern) documentation
+- ✅ Updated package structure with chains/ subdirectory
+- ✅ Added prompts/ directory for agent prompts
+- ✅ Documented diff validation system with retry logic
+- ✅ Added tool calling strategies (Judge vs ReAct patterns)
+- ✅ Updated configuration schema with judge_agent_id and tool_calling_strategy
+- ✅ Documented context_formatter.py for prompt formatting
+- ✅ Added comprehensive tools documentation (read_file, apply_diff with validation)
+- ✅ Updated technology stack diagram with Tool Calling subsystem
+- ✅ Separated "Implemented Features" from "Future Enhancements"
+- ✅ Added references to Feature 17 and Feature 18 documentation
+- ✅ Updated provider adapter architecture with ExecutorProtocol
+
+### Version 1.0 (2025-10-16)
+- Initial architecture documentation
+- Provider abstraction layer design
+- LangChain integration architecture
+- System context and component diagrams

@@ -2,6 +2,127 @@
 
 Thank you for your interest in contributing to BuddyCtl! 🎉
 
+## Development Setup
+
+### Prerequisites
+
+- Python 3.9 or higher
+- Poetry for dependency management
+
+### Setup Development Environment
+
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/evellyncosta/buddyctl-cli
+   cd buddyctl-cli
+   ```
+
+2. **Install Poetry** (if not already installed)
+   ```bash
+   curl -sSL https://install.python-poetry.org | python3 -
+   ```
+
+3. **Install dependencies**
+   ```bash
+   poetry install
+   ```
+
+4. **Set up environment variables**
+   ```bash
+   cp .env.example .env
+   # Edit .env with your StackSpot credentials
+   ```
+
+5. **Run in development mode**
+   ```bash
+   poetry run buddyctl
+   ```
+
+### Useful Poetry Commands
+
+```bash
+# Add a new dependency
+poetry add package-name
+
+# Add a development dependency
+poetry add --group dev package-name
+
+# Update dependencies
+poetry update
+
+# Show installed packages
+poetry show
+
+# Show dependency tree
+poetry show --tree
+
+# Check for dependency issues
+poetry check
+
+# Run commands in the virtual environment
+poetry run <command>
+
+# Activate virtual environment
+poetry shell
+```
+
+### Project Structure
+
+```
+buddyctl-cli/
+├── buddyctl/                # Main package
+│   ├── __init__.py
+│   ├── __main__.py
+│   ├── main.py              # CLI entry point
+│   ├── core/                # Core modules
+│   │   ├── auth.py          # OAuth2 authentication
+│   │   ├── config.py        # Configuration management
+│   │   ├── api_client.py    # API client wrapper
+│   │   └── providers/       # Provider abstraction layer
+│   │       ├── base.py          # ProviderAdapter protocol
+│   │       ├── manager.py       # ProviderManager
+│   │       └── adapters/        # Provider implementations
+│   │           ├── stackspot.py    # StackSpot (implemented)
+│   │           ├── openai.py       # OpenAI (planned)
+│   │           └── anthropic.py    # Anthropic (planned)
+│   ├── cli/                 # CLI components
+│   │   ├── interactive.py   # Interactive shell
+│   │   ├── agent_validator.py   # Agent validation
+│   │   └── chat_client.py   # Chat with SSE streaming
+│   ├── integrations/        # External integrations
+│   │   └── langchain/       # LangChain integration
+│   │       ├── chat_model.py    # StackSpot LangChain wrapper
+│   │       ├── tools.py         # Tools (read_file, apply_diff)
+│   │       ├── agents.py        # ReAct Agent
+│   │       ├── context_formatter.py  # Context formatting
+│   │       ├── chains/          # Chain implementations
+│   │       │   ├── base.py          # Base chain
+│   │       │   ├── stackspot_chain.py  # Judge Agent pattern
+│   │       │   └── legacy.py        # Legacy chains
+│   │       └── examples/        # Usage examples
+│   ├── ui/                  # User interface
+│   │   ├── banner.py        # ASCII banner
+│   │   ├── autosuggestion.py    # File autocompletion
+│   │   ├── enhanced_input.py    # Enhanced input
+│   │   └── visual_suggestions.py # Visual suggestions
+│   └── utils/               # Utilities
+│       ├── file_indexer.py  # File indexing system
+│       └── file_autocomplete.py # File autocomplete
+├── prompts/                 # Agent prompts
+│   ├── README.md            # Prompts documentation
+│   ├── main_agent.md        # Main Agent system prompt
+│   └── judge_agent.md       # Judge Agent system prompt
+├── tests/                   # Test suite
+├── pyproject.toml           # Poetry configuration
+├── poetry.lock              # Lock file (version pinning)
+├── .env.example             # Environment template
+├── README.md                # User documentation
+├── ARCHITECTURE.md          # Architecture documentation
+└── CONTRIBUTING.md          # This file
+```
+
+---
+
 ## How to Contribute
 
 ### Reporting Bugs 🐛
@@ -23,13 +144,15 @@ We welcome feature suggestions! Please:
 
 1. **Fork the repository**
    ```bash
-   git clone https://github.com/yourusername/buddyctl.git
-   cd buddyctl
+   git clone https://github.com/yourusername/buddyctl-cli.git
+   cd buddyctl-cli
    ```
 
-2. **Set up development environment**
+2. **Set up development environment** (see Development Setup above)
    ```bash
    poetry install
+   cp .env.example .env
+   # Edit .env with your credentials
    poetry run buddyctl --help
    ```
 

@@ -13,7 +13,6 @@ pip install buddyctl
 **Verify Installation:**
 
 ```bash
-buddyctl --version
 buddyctl --help
 ```
 
@@ -25,7 +24,38 @@ pip install --upgrade buddyctl
 
 ## Configuration
 
-Create a `.env` file in your project directory with your StackSpot credentials:
+### Setting up StackSpot Provider
+
+BuddyCtl currently supports **StackSpot AI** as the LLM provider. You'll need to configure two agents in your StackSpot account:
+
+#### 1. Get StackSpot Credentials
+
+Generate your API credentials in your [StackSpot account](https://stackspot.com):
+- Client ID
+- Client Secret
+- Realm
+
+#### 2. Create Two Agents in StackSpot
+
+You need to create **two separate agents** in StackSpot AI:
+
+**Main Agent (Coder Agent)**
+- **Purpose**: Generates responses and code modifications
+- **Recommended Prompt**: Use the validated prompt from [`prompts/main_agent.md`](prompts/main_agent.md)
+- **Custom Prompts**: You can use your own prompt if preferred
+- **Characteristics**: Natural, conversational tone; generates complete unified diffs
+
+**Judge Agent**
+- **Purpose**: Analyzes Main Agent responses and decides when to execute tools
+- **Recommended Prompt**: Use the validated prompt from [`prompts/judge_agent.md`](prompts/judge_agent.md)
+- **Custom Prompts**: You can use your own prompt if preferred
+- **Characteristics**: Analytical tone; returns structured JSON decisions
+
+> **Note**: The validated prompts in the `prompts/` directory are tested and optimized for the two-stage tool calling pattern. While you can use custom prompts, the provided ones are recommended for best results.
+
+#### 3. Configure Environment Variables
+
+Create a `.env` file in your project directory:
 
 ```env
 # Required: StackSpot Authentication
@@ -33,13 +63,24 @@ STACKSPOT_CLIENT_ID=your_client_id_here
 STACKSPOT_CLIENT_SECRET=your_client_secret_here
 STACKSPOT_REALM=your_realm_here
 
-# Optional: Default Agent ID
-STACKSPOT_CODER_ID=your_agent_id_here
+# Required: StackSpot API URLs
+STACKSPOT_AUTH_URL=https://idm.stackspot.com
+STACKSPOT_API_URL=https://genai-inference-app.stackspot.com
+
+# Required: Agent IDs (from StackSpot AI dashboard)
+STACKSPOT_CODER_ID=your_main_agent_id_here
+STACKSPOT_JUDGE_AGENT_ID=your_judge_agent_id_here
 ```
 
-**Where to get credentials:**
-- Generate your credentials in your [StackSpot account](https://stackspot.com)
-- Find your agent ID in the StackSpot AI dashboard
+**All variables are required.** BuddyCtl uses both agents together in a two-stage pattern for improved reliability when modifying code.
+
+#### Architecture Details
+
+For more information about how the two-stage tool calling pattern works, see [ARCHITECTURE.md](ARCHITECTURE.md#judge-agent-pattern-two-stage-tool-calling).
+
+---
+
+**Future Providers**: Support for OpenAI, Anthropic, and other LLM providers is planned but not yet implemented. Currently, only StackSpot AI is supported.
 
 ## Usage
 
@@ -49,14 +90,8 @@ After installation and configuration, use BuddyCtl directly:
 # Run the interactive shell
 buddyctl
 
-# Check authentication status
-buddyctl auth status
-
-# Login with your credentials
+# Login with your credentials (if not authenticated)
 buddyctl auth login
-
-# Set default agent
-buddyctl agent-default <agent_id>
 
 # Show help
 buddyctl --help
@@ -67,9 +102,13 @@ buddyctl --help
 - 🔐 OAuth2 authentication with StackSpot
 - 🤖 Agent management and configuration
 - 💬 Interactive chat with streaming responses
+- 🛠️ **Two-stage tool calling** with Judge Agent pattern
+- 🔄 Automatic diff validation and retry logic (up to 3 attempts)
+- 📝 Code modification with unified diff format
 - 📁 File autocompletion with @ navigation
 - 🔍 Real-time file indexing and suggestions
-- 📝 Command history and auto-suggestions
+- 📋 Command history and auto-suggestions
+- 🔌 Provider abstraction layer (OpenAI, Anthropic planned)
 
 ## Usage Examples
 
@@ -77,18 +116,6 @@ buddyctl --help
 ```bash
 # Login with your credentials
 buddyctl auth login
-
-# Check authentication status
-buddyctl auth status
-
-# Logout
-buddyctl auth logout
-```
-
-### Setting Default Agent
-```bash
-# Set the default agent for conversations
-buddyctl agent-default <your-agent-id>
 ```
 
 ### Interactive Shell
@@ -99,8 +126,6 @@ buddyctl
 # Inside the shell:
 /help              # Show available commands
 /status            # Check auth and agent status
-/agent-default <id> # Set default agent
-/provider          # List or change LLM provider
 /clear             # Clear screen
 /exit              # Exit shell
 
@@ -109,136 +134,12 @@ Hello, how can you help me?
 
 # Reference files in your messages using @
 Can you review @src/main.py and suggest improvements?
+
+# Request code modifications (automatically applied)
+Add type hints to @calculator.py
 ```
 
-## Development
-
-For contributors and developers who want to work on BuddyCtl itself:
-
-### Setup Development Environment
-
-1. Clone the repository:
-```bash
-git clone https://github.com/evellyncosta/buddyctl-cli
-cd buddyctl-cli
-```
-
-2. Install Poetry:
-```bash
-curl -sSL https://install.python-poetry.org | python3 -
-```
-
-3. Install dependencies:
-```bash
-poetry install
-```
-
-4. Run in development mode:
-```bash
-poetry run buddyctl
-```
-
-### Useful Poetry commands:
-
-```bash
-# Add a new dependency
-poetry add package-name
-
-# Add a development dependency
-poetry add --group dev package-name
-
-# Update dependencies
-poetry update
-
-# Show installed packages
-poetry show
-
-# Show dependency tree
-poetry show --tree
-
-# Check for dependency issues
-poetry check
-
-# Run commands in the virtual environment
-poetry run <command>
-
-# Activate virtual environment (Poetry 2.0+)
-source $(poetry env info --path)/bin/activate
-
-# Or install the shell plugin for poetry shell command
-poetry self add poetry-plugin-shell
-poetry shell
-```
-
-### Adding LangChain Integration
-
-```bash
-# Add LangChain core
-poetry add langchain
-
-# Add specific integrations
-poetry add langchain-openai      # For OpenAI/GPT models
-poetry add langchain-anthropic   # For Claude API
-poetry add langchain-community   # Community integrations
-
-# Verify installation
-poetry run python -c "import langchain; print(langchain.__version__)"
-```
-
-### Running tests and linters:
-
-```bash
-# If you add these dev dependencies:
-poetry add --group dev pytest black ruff
-
-# Run tests
-poetry run pytest
-
-# Format code
-poetry run black .
-
-# Lint code
-poetry run ruff check .
-```
-
-### Project Structure
-
-```
-buddyctl-cli/
-├── buddyctl/                # Main package
-│   ├── __init__.py
-│   ├── __main__.py
-│   ├── main.py              # CLI entry point
-│   ├── core/                # Core modules
-│   │   ├── auth.py          # OAuth2 authentication
-│   │   ├── config.py        # Configuration management
-│   │   └── api_client.py    # API client wrapper
-│   ├── cli/                 # CLI components
-│   │   ├── interactive.py   # Interactive shell
-│   │   ├── agent_validator.py   # Agent validation
-│   │   └── chat_client.py   # Chat with SSE streaming
-│   ├── integrations/        # External integrations
-│   │   └── langchain/       # LangChain integration
-│   │       ├── chat_model.py    # StackSpot LangChain wrapper
-│   │       ├── chains.py        # Orchestration chains
-│   │       ├── tools.py         # LangChain tools
-│   │       ├── utils.py         # Utilities
-│   │       └── examples/        # Usage examples
-│   ├── ui/                  # User interface
-│   │   ├── banner.py        # ASCII banner
-│   │   ├── autosuggestion.py    # File autocompletion
-│   │   ├── enhanced_input.py    # Enhanced input
-│   │   └── visual_suggestions.py # Visual suggestions
-│   └── utils/               # Utilities
-│       ├── file_indexer.py  # File indexing system
-│       └── file_autocomplete.py # File autocomplete
-├── pyproject.toml           # Poetry configuration
-├── poetry.lock              # Lock file (version pinning)
-├── .env.example             # Environment template
-└── README.md                # This file
-```
-
-### Using as a Library
+## Using as a Library
 
 BuddyCtl can be used as a library in other Python projects:
 
@@ -250,57 +151,46 @@ pip install buddyctl
 pip install git+https://github.com/evellyncosta/buddyctl-cli.git
 
 # Use the LangChain integration
-from buddyctl.integrations.langchain import StackSpotChatModel, create_coder_chain
+from buddyctl.integrations.langchain import StackSpotChatModel
+from buddyctl.integrations.langchain.chains import StackSpotChain
+from buddyctl.integrations.langchain.tools import read_file, apply_diff
 
 # Create a StackSpot chat model
 model = StackSpotChatModel(agent_id="your-agent-id")
 response = model.invoke("Explain Python decorators")
 
-# Or use chains to generate and apply diffs
-chain = create_coder_chain(
-    agent_id="your-agent-id",
-    auto_apply=True  # Automatically applies the diff to the file
+# Use Judge Agent pattern for code modifications
+chain = StackSpotChain(
+    main_agent_id="your-main-agent-id",
+    judge_agent_id="your-judge-agent-id",
+    tools=[read_file, apply_diff]
 )
 
-result = chain.invoke({
-    "file_path": "src/main.py",
-    "instruction": "Add error handling"
-})
+result = chain.invoke("Add type hints to calculator.py")
 
-print(result["diff"])  # Shows the unified diff
-print(result["apply_result"])  # Shows if the diff was applied successfully
+print(result["output"])          # Final response
+print(result["tool_calls_made"]) # Tools that were executed
+print(result["iterations"])      # Number of cycles
 ```
 
 ## Troubleshooting
 
 ### Command not found: buddyctl
-Make sure you're using `poetry run buddyctl` or have created an alias.
+If you installed with pip, make sure the installation directory is in your PATH.
 
 ### Authentication fails
 - Verify your credentials in `.env` file
-- Check if CLIENT_ID, CLIENT_SECRET, and REALM are correct
-- Try: `poetry run buddyctl auth login`
-
-### Poetry command not found
-Install Poetry:
-```bash
-curl -sSL https://install.python-poetry.org | python3 -
-```
-
-### Dependency conflicts
-```bash
-# Clear cache and reinstall
-poetry cache clear pypi --all
-poetry install
-```
+- Check if all required variables are set correctly
+- Try: `buddyctl auth login`
 
 ## Contributing
 
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Run tests and linters
-5. Submit a pull request
+Interested in contributing? Check out our [Contributing Guide](CONTRIBUTING.md) for details on:
+- Setting up the development environment
+- Code style and testing guidelines
+- How to submit pull requests
+
+We welcome contributions! 🚀
 
 ## License
 
