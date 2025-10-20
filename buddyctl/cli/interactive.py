@@ -620,10 +620,35 @@ class InteractiveShell:
             print_formatted_text(HTML(f"<ansiyellow>⚠️ Input error: {e}</ansiyellow>"))
             return input(self._get_prompt_text())
 
+    def _check_default_agent_configuration(self) -> None:
+        """
+        Check if default agent is configured and warn user if not.
+
+        This validates BEFORE user tries to send messages, providing
+        better UX by showing configuration requirements upfront.
+        """
+        config_status = self.config.get_config_status()
+
+        if not config_status["has_default_agent"]:
+            # Show prominent warning
+            print_formatted_text(HTML("<ansiyellow>⚠️  WARNING: No default agent configured!</ansiyellow>"))
+            print()
+            print_formatted_text(HTML("    To use buddyctl, you need to configure a default agent ID."))
+            print()
+            print_formatted_text(HTML("    <b>Options:</b>"))
+            print_formatted_text(HTML("    1. Set via command:  <ansiblue>/agent-default &lt;your-agent-id&gt;</ansiblue>"))
+            print_formatted_text(HTML("    2. Set via env var: <ansiblue>export STACKSPOT_CODER_ID=&lt;your-agent-id&gt;</ansiblue>"))
+            print()
+            print_formatted_text(HTML("    You can still use commands like <ansiblue>/help</ansiblue> and <ansiblue>/status</ansiblue> without an agent."))
+            print()
+
     def run(self) -> None:
         """Run the interactive shell."""
         # Display initial banner
         display_banner(self.auth, self.config)
+
+        # Validate default agent configuration
+        self._check_default_agent_configuration()
 
         print_formatted_text(HTML("<ansicyan>Welcome to buddyctl interactive shell!</ansicyan>"))
         print_formatted_text(HTML("• Type any message to chat with your agent"))

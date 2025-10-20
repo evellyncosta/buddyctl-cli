@@ -49,9 +49,24 @@ class BuddyConfig:
             raise ConfigurationError(f"Failed to save configuration: {e}")
 
     def get_default_agent_id(self) -> Optional[str]:
-        """Get the configured default agent ID."""
+        """
+        Get the configured default agent ID.
+
+        Priority:
+        1. Config file: ~/.buddyctl/config.json -> default_agent_id
+        2. Environment variable: STACKSPOT_CODER_ID
+
+        Returns:
+            Agent ID or None if not configured
+        """
         config = self._load_config()
-        return config.get("default_agent_id")
+        agent_id = config.get("default_agent_id")
+
+        # Fallback to environment variable
+        if not agent_id:
+            agent_id = os.getenv("STACKSPOT_CODER_ID")
+
+        return agent_id
 
     def set_default_agent_id(self, agent_id: str) -> None:
         """Set the default agent ID."""
@@ -239,7 +254,8 @@ class BuddyConfig:
     def get_config_status(self) -> Dict[str, Any]:
         """Get current configuration status for display."""
         config = self._load_config()
-        agent_id = config.get("default_agent_id")
+        # Use get_default_agent_id() to include env var fallback
+        agent_id = self.get_default_agent_id()
         updated_at = config.get("updated_at")
         current_provider = self.get_current_provider()
         agent_mode = self.get_agent_mode()

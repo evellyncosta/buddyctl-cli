@@ -38,7 +38,7 @@ def get_agent_status_display(config: "BuddyConfig") -> str:
     if status["has_default_agent"]:
         return f"🤖 Default Agent: {status['default_agent_id']}"
     else:
-        return "🤖 Default Agent: Not configured"
+        return "⚠️  Default Agent: Not configured"
 
 
 def display_banner(auth: "StackSpotAuth" = None, config: Optional["BuddyConfig"] = None) -> None:
