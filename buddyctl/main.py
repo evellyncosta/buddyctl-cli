@@ -97,8 +97,17 @@ def main(
     debug: bool = typer.Option(False, "--debug", help="Enable debug mode with detailed logging")
 ) -> None:
     """Main entry point for buddyctl CLI."""
+    import sys
+
     # Check environment variable for debug mode
-    debug = debug or os.getenv('DEBUG', '').lower() in ('1', 'true', 'yes')
+    env_debug = os.getenv('DEBUG', '').lower() in ('1', 'true', 'yes')
+
+    # Ensure --debug flag is properly detected
+    # Typer might not always parse it correctly when used with invoke_without_command=True
+    cli_debug = '--debug' in sys.argv
+
+    # Enable debug if any source indicates it should be enabled
+    debug = debug or env_debug or cli_debug
 
     # Setup logging
     log_file = setup_logging(debug=debug)
