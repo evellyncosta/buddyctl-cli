@@ -1,7 +1,9 @@
 """OAuth2 authentication module for StackSpot integration."""
 
 import json
+import logging
 import os
+import threading
 import time
 from pathlib import Path
 from typing import Dict, Optional, Any
@@ -29,6 +31,12 @@ class StackSpotAuth:
         self.client_secret = os.getenv("STACKSPOT_CLIENT_SECRET")
         self.realm = os.getenv("STACKSPOT_REALM")
         self.auth_url = os.getenv("STACKSPOT_AUTH_URL", "https://idm.stackspot.com")
+
+        # Token cache and synchronization
+        self._token_cache: Optional[Dict[str, Any]] = None
+        self._cache_lock = threading.Lock()
+        self._token_buffer = int(os.getenv("STACKSPOT_TOKEN_BUFFER", "300"))  # 5 min default
+        self._logger = logging.getLogger(__name__)
 
     def _ensure_credentials_dir(self) -> None:
         """Ensure the credentials directory exists with proper permissions."""
@@ -115,16 +123,45 @@ class StackSpotAuth:
         except (json.JSONDecodeError, IOError):
             return None
 
-    def _is_token_expired(self, credentials: Dict[str, Any]) -> bool:
-        """Check if the current token is expired."""
+    def _is_token_expired(self, credentials: Dict[str, Any], buffer: Optional[int] = None) -> bool:
+        """Check if the current token is expired or will expire soon.
+
+        Args:
+            credentials: Credential dictionary with expires_at
+            buffer: Custom buffer in seconds (default: self._token_buffer)
+
+        Returns:
+            True if token is expired or will expire within buffer time
+        """
+        if buffer is None:
+            buffer = self._token_buffer
+
         expires_at = credentials.get("expires_at", 0)
-        # Add 60 second buffer to account for request time
-        return time.time() >= (expires_at - 60)
+        current_time = time.time()
+        time_until_expiry = expires_at - current_time
+
+        # Log detailed expiration info
+        if time_until_expiry <= buffer:
+            self._logger.debug(
+                f"Token expiring soon or expired. Time until expiry: {time_until_expiry:.0f}s, "
+                f"buffer: {buffer}s"
+            )
+
+        return current_time >= (expires_at - buffer)
 
     def _refresh_token(self, credentials: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        """Attempt to refresh the token using refresh_token."""
+        """Attempt to refresh the token using refresh_token.
+
+        Args:
+            credentials: Current credentials with refresh_token
+
+        Returns:
+            New credentials if refresh succeeds, None otherwise
+        """
         refresh_token = credentials.get("refresh_token")
         if not refresh_token:
+            # This is expected for client_credentials flow
+            self._logger.debug("No refresh_token available (likely client_credentials flow)")
             return None
 
         token_url = self._get_token_endpoint()
@@ -139,6 +176,7 @@ class StackSpotAuth:
         headers = {"Content-Type": "application/x-www-form-urlencoded"}
 
         try:
+            self._logger.debug("Attempting to refresh token...")
             with httpx.Client() as client:
                 response = client.post(token_url, data=data, headers=headers)
                 response.raise_for_status()
@@ -157,31 +195,97 @@ class StackSpotAuth:
                 "token_type": token_data.get("token_type", "Bearer"),
             }
 
+            self._logger.debug(f"Token refreshed successfully. New expiration: {expires_in}s")
             return new_credentials
 
-        except (httpx.HTTPStatusError, httpx.RequestError, KeyError):
-            # Refresh failed, will need to re-authenticate
+        except (httpx.HTTPStatusError, httpx.RequestError, KeyError) as e:
+            # Refresh failed, will fallback to re-authentication
+            self._logger.debug(f"Token refresh failed: {type(e).__name__}")
             return None
 
-    def get_valid_token(self) -> str:
-        """Get a valid access token, handling refresh and re-authentication as needed."""
-        credentials = self._load_credentials()
+    def _handle_token_renewal(self, credentials: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+        """Handle token renewal with fallback strategy.
 
-        # If no credentials exist or token is expired, try to refresh or re-authenticate
-        if not credentials or self._is_token_expired(credentials):
-            if credentials:
-                # Try to refresh the token first
+        Strategy:
+        1. Try refresh_token if available
+        2. Fallback to full re-authentication
+        3. Clear credentials on failure
+
+        Args:
+            credentials: Current credentials (may be expired or None)
+
+        Returns:
+            New valid credentials
+
+        Raises:
+            AuthenticationError: If all renewal attempts fail
+        """
+        # Try refresh first if we have credentials
+        if credentials:
+            refresh_token = credentials.get("refresh_token")
+
+            if refresh_token:
+                # Attempt refresh
+                self._logger.debug("Attempting token refresh with refresh_token")
                 new_credentials = self._refresh_token(credentials)
                 if new_credentials:
-                    self._save_credentials(new_credentials)
-                    return new_credentials["access_token"]
+                    self._logger.debug("Token refresh successful")
+                    return new_credentials
+                else:
+                    self._logger.debug("Token refresh failed, falling back to full authentication")
+            else:
+                self._logger.debug("No refresh_token available, performing full authentication")
 
-            # Refresh failed or no credentials, perform full authentication
+        # Fallback: full re-authentication
+        try:
+            self._logger.debug("Requesting new access token")
             new_credentials = self._request_access_token()
-            self._save_credentials(new_credentials)
-            return new_credentials["access_token"]
+            self._logger.debug("New access token obtained successfully")
+            return new_credentials
+        except AuthenticationError as e:
+            # Clear invalid credentials
+            self._logger.error(f"Authentication failed: {e}")
+            if self.credentials_path.exists():
+                self._logger.debug("Clearing invalid credentials")
+                self.credentials_path.unlink()
+            raise
 
-        return credentials["access_token"]
+    def get_valid_token(self) -> str:
+        """Get a valid access token, handling refresh and re-authentication as needed.
+
+        This method implements proactive token refresh:
+        - Checks cache first (in-memory)
+        - Refreshes proactively before expiration
+        - Uses lock to prevent concurrent refresh attempts
+
+        Returns:
+            Valid access token
+
+        Raises:
+            AuthenticationError: If authentication fails
+        """
+        with self._cache_lock:
+            # Check cache first
+            if self._token_cache and not self._is_token_expired(self._token_cache):
+                self._logger.debug("Using cached token")
+                return self._token_cache["access_token"]
+
+            # Cache miss or expired, load from disk
+            self._logger.debug("Cache miss or expired, loading credentials from disk")
+            credentials = self._load_credentials()
+
+            # If no credentials or expired, try refresh or re-auth
+            if not credentials or self._is_token_expired(credentials):
+                self._logger.debug("Credentials missing or expired, initiating token renewal")
+                new_credentials = self._handle_token_renewal(credentials)
+                self._save_credentials(new_credentials)
+                self._token_cache = new_credentials
+                return new_credentials["access_token"]
+
+            # Valid credentials, update cache
+            self._logger.debug("Credentials valid, updating cache")
+            self._token_cache = credentials
+            return credentials["access_token"]
 
     def is_authenticated(self) -> bool:
         """Check if we have valid authentication."""

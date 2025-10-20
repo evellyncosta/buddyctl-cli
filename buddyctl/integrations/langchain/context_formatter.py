@@ -22,7 +22,7 @@ the quality of agent responses.
 from pathlib import Path
 
 
-def format_file_with_line_numbers(file_path: str, max_line_width: int = 120) -> str:
+def format_file_with_line_numbers(file_path: str) -> str:
     """
     Format file with line numbers for LLM context.
 
@@ -38,10 +38,9 @@ def format_file_with_line_numbers(file_path: str, max_line_width: int = 120) -> 
 
     Args:
         file_path: File path (absolute or relative)
-        max_line_width: Maximum line width (truncates if exceeded)
 
     Returns:
-        String formatted with line numbers
+        String formatted with line numbers (no truncation)
 
     Raises:
         FileNotFoundError: If file doesn't exist
@@ -83,9 +82,9 @@ def format_file_with_line_numbers(file_path: str, max_line_width: int = 120) -> 
     # Format each line
     formatted_lines = []
     for i, line in enumerate(lines, start=1):
-        # Truncate line if too long
-        if len(line) > max_line_width:
-            line = line[:max_line_width - 3] + "..."
+        # NO TRUNCATION - show full lines
+        # (Truncation was causing diff validation failures because Main Agent
+        # saw truncated content but generated diffs for full lines)
 
         # Format: "   1 | content"
         formatted_line = f"{i:>{line_num_width}} | {line}"

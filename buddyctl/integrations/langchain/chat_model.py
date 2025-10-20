@@ -177,8 +177,8 @@ class StackSpotChatModel(BaseChatModel):
                 pool=30.0        # 30s for connection pool
             )
         else:
-            # For non-streaming: standard 30s timeout for everything
-            return httpx.Timeout(30.0)
+            # For non-streaming: 120s timeout (Judge Agent pode demorar)
+            return httpx.Timeout(120.0)
 
     def _handle_error_response(self, response: httpx.Response) -> None:
         """Handle HTTP error responses.

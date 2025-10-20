@@ -72,3 +72,11 @@ class APIClient:
         """Get authentication headers for API requests."""
         token = self.auth.get_valid_token()
         return {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+
+    def is_token_valid(self) -> bool:
+        """Check if current token is valid.
+
+        Returns:
+            True if token exists and is not expired
+        """
+        return self.auth.is_authenticated()

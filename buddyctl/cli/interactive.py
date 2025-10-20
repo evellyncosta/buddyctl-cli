@@ -644,6 +644,14 @@ class InteractiveShell:
 
     def run(self) -> None:
         """Run the interactive shell."""
+        # Attempt to ensure valid authentication before displaying banner
+        # This proactively refreshes expired tokens for better UX
+        try:
+            self.auth.get_valid_token()
+        except Exception:
+            # Don't fail if auth doesn't work - just show the status
+            pass
+
         # Display initial banner
         display_banner(self.auth, self.config)
 

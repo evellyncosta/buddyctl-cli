@@ -15,6 +15,7 @@ import re
 
 from .base import BaseChain
 from ..chat_model import StackSpotChatModel
+from ....ui.message_box import MessageBox
 
 
 class StackSpotChain(BaseChain):
@@ -108,6 +109,25 @@ class StackSpotChain(BaseChain):
             # 3. If no tools needed, return directly
             if not decision["needs_tools"]:
                 self.logger.debug("No tools needed, returning response")
+
+                # Check if this is due to a parse error
+                if decision.get("parse_error"):
+                    MessageBox.error(
+                        "ERRO: Não foi possível aplicar o diff",
+                        "Por favor, aplique as alterações manualmente."
+                    )
+                    error_message = (
+                        f"{main_response}\n\n"
+                        f"(Erro interno: falha ao processar resposta do judge - {decision.get('reasoning')})"
+                    )
+                    return {
+                        "output": error_message,
+                        "tool_calls_made": [],
+                        "iterations": 1,
+                        "validation_rounds": round_number - 1,
+                        "parse_error": True
+                    }
+
                 return {
                     "output": main_response,
                     "tool_calls_made": [],
@@ -138,6 +158,12 @@ class StackSpotChain(BaseChain):
                 self.logger.debug("Step 5: Executing tools")
                 tool_results = self._execute_tools(decision["tool_calls"])
 
+                # Log visual de sucesso ao aplicar diff
+                MessageBox.success(
+                    f"SUCESSO: Diff aplicado com sucesso (round {round_number})",
+                    f"Arquivo: {file_path}"
+                )
+
                 return {
                     "output": main_response,
                     "tool_calls_made": decision["tool_calls"],
@@ -151,7 +177,12 @@ class StackSpotChain(BaseChain):
                 self.logger.warning(f"Validation error: {validation_error}")
 
                 if round_number == MAX_ROUNDS:
-                    # Last attempt failed
+                    # Last attempt failed - log visual de erro final
+                    MessageBox.error(
+                        f"ERRO: Falha ao gerar diff válido após {MAX_ROUNDS} tentativas",
+                        f"Erro de validação: {validation_error}"
+                    )
+
                     error_message = (
                         f"Failed to generate valid diff after {MAX_ROUNDS} attempts.\n"
                         f"Final validation error: {validation_error}\n\n"
@@ -166,7 +197,11 @@ class StackSpotChain(BaseChain):
                         "error": validation_error
                     }
                 else:
-                    # Try again
+                    # Try again - log visual de retry de ROUND
+                    MessageBox.warning(
+                        f"RETRY: Diff inválido, tentando ROUND {round_number + 1}/{MAX_ROUNDS}",
+                        f"Razão: {validation_error}"
+                    )
                     self.logger.info(f"Retrying with correction (round {round_number + 1})")
                     round_number += 1
                     continue  # Back to start of loop
@@ -180,20 +215,38 @@ class StackSpotChain(BaseChain):
             "validation_rounds": MAX_ROUNDS
         }
 
-    def _analyze_with_judge(self, user_input: str, assistant_response: str) -> Dict[str, Any]:
+    def _analyze_with_judge(
+        self,
+        user_input: str,
+        assistant_response: str,
+        max_judge_retries: int = 3
+    ) -> Dict[str, Any]:
         """
         Chama Judge Agent para analisar resposta.
+
+        Implementa retry automático quando JSON é truncado.
+
+        Args:
+            user_input: User request
+            assistant_response: Main Agent response
+            max_judge_retries: Maximum retry attempts for Judge Agent (default: 3)
 
         Returns:
             {"needs_tools": bool, "tool_calls": List, "reasoning": str}
         """
-        # Build prompt
+        # Build tools list
         tools_list = "\n".join([
             f"- {name}: {tool.description}"
             for name, tool in self.tools.items()
         ])
 
-        prompt = f"""Analyze the assistant's response and decide if tools should be executed.
+        # Retry loop
+        for attempt in range(1, max_judge_retries + 1):
+            try:
+                # Build prompt (diferente para retry)
+                if attempt == 1:
+                    # Primeira tentativa: prompt normal
+                    prompt = f"""Analyze the assistant's response and decide if tools should be executed.
 
 User Request:
 {user_input}
@@ -203,35 +256,104 @@ Assistant Response:
 
 Available Tools:
 {tools_list}"""
+                    self.logger.debug("Invoking Judge Agent")
+                else:
+                    # Retry: prompt MODIFICADO (mais conciso)
+                    prompt = f"""Your previous response was truncated. Please analyze again and respond with VALID, COMPLETE JSON only.
 
-        # Call Judge Agent
-        self.logger.debug("Invoking Judge Agent")
-        response = self.judge_model.invoke(prompt)
-        response_text = response.content if hasattr(response, 'content') else str(response)
-        self.logger.debug(f"Judge raw response (first 500 chars): {response_text[:500]}")
+CRITICAL: Generate a compact JSON response. If the diff is large, you MUST still include it entirely, but ensure the JSON is properly closed.
 
-        # Parse JSON (extract from markdown if needed)
-        json_text = self._extract_json(response_text)
-        self.logger.debug(f"Extracted JSON (first 300 chars): {json_text[:300]}")
+User Request:
+{user_input}
 
-        try:
-            decision = json.loads(json_text)
-            self.logger.debug(f"Parsed decision: {decision}")
-            return decision
-        except json.JSONDecodeError as e:
-            self.logger.warning(f"Failed to parse judge response: {e}")
-            self.logger.debug(f"Failed JSON text: {json_text[:500]}")
-            return {
-                "needs_tools": False,
-                "tool_calls": [],
-                "reasoning": f"Parse error: {e}"
-            }
+Assistant Response:
+{assistant_response}
+
+Available Tools:
+{tools_list}
+
+IMPORTANT: Your response MUST be valid JSON. Close all strings, arrays, and objects properly."""
+                    # Log visual de retry
+                    MessageBox.warning(
+                        f"RETRY: Tentando novamente o Judge Agent ({attempt}/{max_judge_retries})",
+                        "Razão: Resposta JSON truncada na tentativa anterior"
+                    )
+                    self.logger.info(f"Retrying Judge Agent (attempt {attempt}/{max_judge_retries})...")
+
+                response = self.judge_model.invoke(prompt)
+                response_text = response.content if hasattr(response, 'content') else str(response)
+                self.logger.debug(f"Judge raw response (first 500 chars): {response_text[:500]}")
+
+                # Parse JSON
+                json_text = self._extract_json(response_text)
+                self.logger.debug(f"Extracted JSON (first 300 chars): {json_text[:300]}")
+
+                # Try to parse
+                decision = json.loads(json_text)
+                self.logger.debug(f"Parsed decision: {decision}")
+
+                # ✅ Success!
+                if attempt > 1:
+                    # Log visual de sucesso no retry
+                    MessageBox.success(f"SUCESSO: Judge Agent respondeu corretamente (tentativa {attempt})")
+                    self.logger.info(f"✅ Judge Agent succeeded on attempt {attempt}")
+
+                return decision
+
+            except json.JSONDecodeError as e:
+                self.logger.warning(f"Failed to parse judge response (attempt {attempt}/{max_judge_retries}): {e}")
+                self.logger.debug(f"Failed JSON text: {json_text[:500]}")
+
+                # Se última tentativa, desiste
+                if attempt == max_judge_retries:
+                    # Log visual de falha total
+                    MessageBox.error(
+                        f"ERRO: Judge Agent falhou após {max_judge_retries} tentativas",
+                        "O diff gerado não será aplicado automaticamente."
+                    )
+                    self.logger.error(f"❌ Judge Agent failed after {max_judge_retries} attempts")
+                    return {
+                        "needs_tools": False,
+                        "tool_calls": [],
+                        "reasoning": f"Parse error after {max_judge_retries} attempts: {e}",
+                        "parse_error": True
+                    }
+
+                # Senão, retry (volta pro início do loop)
+                continue
+
+        # Should never reach here
+        return {
+            "needs_tools": False,
+            "tool_calls": [],
+            "reasoning": "Unexpected: retry loop failed",
+            "parse_error": True
+        }
 
     def _extract_json(self, text: str) -> str:
-        """Extract JSON from markdown code blocks or plain text."""
-        # Try markdown code blocks first
-        match = re.search(r'```(?:json)?\s*\n?(.*?)\n?```', text, re.DOTALL)
-        return match.group(1).strip() if match else text.strip()
+        """
+        Extract JSON from markdown code blocks or plain text.
+
+        No repair logic - just extract and let retry handle failures.
+        """
+        stripped = text.strip()
+
+        # If text starts with { or [, it's raw JSON (no markdown blocks)
+        if stripped.startswith('{') or stripped.startswith('['):
+            return stripped
+
+        # Try JSON markdown code blocks (```json)
+        match = re.search(r'```json\s*\n?(.*?)\n?```', text, re.DOTALL)
+        if match:
+            return match.group(1).strip()
+
+        # If no ```json block, try plain ``` blocks
+        match = re.search(r'```\s*\n?(.*?)\n?```', text, re.DOTALL)
+        if match:
+            return match.group(1).strip()
+
+        # If no code blocks, return the whole text
+        return stripped
 
     def _extract_diff_from_tool_calls(self, tool_calls: List[Dict[str, Any]]) -> tuple[str | None, str | None]:
         """

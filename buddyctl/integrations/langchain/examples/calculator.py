@@ -28,6 +28,19 @@ def add_two_numbers(a: float, b: float) -> float:
     return a + b
 
 
+def subtract_two_numbers(a: float, b: float) -> float:
+    """Subtract two numbers.
+
+    Args:
+        a: First number (minuend)
+        b: Second number (subtrahend)
+
+    Returns:
+        Subtraction of b from a
+    """
+    return a - b
+
+
 def divide_two_numbers(a: float, b: float) -> float:
     """Divide two numbers.
 
@@ -54,3 +67,6 @@ if __name__ == "__main__":
     
     result = divide_two_numbers(5.5, 3.2)
     print(f"5.5 / 3.2 = {result}")
+    
+    result = subtract_two_numbers(10, 3)
+    print(f"10 - 3 = {result}")

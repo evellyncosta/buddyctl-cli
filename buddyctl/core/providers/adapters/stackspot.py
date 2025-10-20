@@ -84,8 +84,9 @@ class StackSpotAdapter:
             bool: True se autenticado e pronto para uso
         """
         try:
-            auth_status = self.auth.get_auth_status()
-            return auth_status["authenticated"]
+            # Attempt to get a valid token - this will trigger refresh if needed
+            self.auth.get_valid_token()
+            return True
         except Exception:
             return False
 
@@ -97,16 +98,16 @@ class StackSpotAdapter:
             tuple: (success: bool, error_message: Optional[str])
         """
         try:
-            status = self.auth.get_auth_status()
-            if status["authenticated"]:
-                # Verifica também se tem agent_id
-                agent_id = self.config.get_default_agent_id()
-                if not agent_id:
-                    return False, "No default agent_id configured"
-                return True, None
-            return False, f"Not authenticated: {status['status']}"
+            # Attempt to get a valid token - this will trigger refresh if needed
+            self.auth.get_valid_token()
+
+            # Verifica também se tem agent_id
+            agent_id = self.config.get_default_agent_id()
+            if not agent_id:
+                return False, "No default agent_id configured"
+            return True, None
         except Exception as e:
-            return False, f"Validation error: {str(e)}"
+            return False, f"Authentication failed: {str(e)}"
 
     def chat_stream(
         self,

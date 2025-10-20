@@ -750,18 +750,35 @@ Located at: `buddyctl/integrations/langchain/tools.py:validate_diff_applicabilit
 - Enables retry logic with context
 
 #### 5. Retry Mechanism
-When diff validation fails:
+
+There are **two types of retry** in the Judge Agent pattern:
+
+##### A. ROUND Retry (Main Agent Correction)
+
+A **ROUND** is a complete cycle:
+1. Main Agent generates response
+2. Judge Agent analyzes (with internal retry for JSON parsing)
+3. Diff validation
+4. Apply diff or retry entire ROUND
+
+**Configuration**: `MAX_ROUNDS = 3`
+
+**Triggers**: When diff is syntactically valid but doesn't apply to the file
+
+**Example Flow**:
 
 **Round 1:** Initial attempt
 ```
 User: "Add comments to calculator.py"
 Main Agent: [generates diff with wrong line numbers]
+Judge Agent: [returns valid JSON with diff]
 Validator: ❌ "Hunk at line 34 does not match file content"
+→ Retry ROUND (call Main Agent again)
 ```
 
 **Round 2:** Correction with context
 ```
-Correction Prompt:
+Correction Prompt to Main Agent:
 "ROUND 2 - DIFF CORRECTION REQUIRED
 
 Your previous diff failed with:
@@ -777,10 +794,44 @@ Current file content with line numbers:
 Please generate a CORRECTED diff using the exact line numbers shown above."
 
 Main Agent: [generates corrected diff]
+Judge Agent: [returns valid JSON with diff]
 Validator: ✅ Valid
+→ Apply diff successfully
 ```
 
 **Up to 3 rounds** before giving up
+
+##### B. Judge Agent Retry (JSON Parsing - Proposed in Fix-24)
+
+**Configuration**: `MAX_JUDGE_RETRIES = 3` (proposed, not yet implemented)
+
+**Triggers**: When Judge Agent returns truncated/invalid JSON
+
+**Current Behavior**: If Judge Agent returns invalid JSON → fails immediately
+
+**Proposed Behavior**: Retry Judge Agent call up to 3 times within the same ROUND
+
+**Example Flow** (proposed):
+```
+ROUND 1:
+  Main Agent: [generates valid diff] ✅
+  Judge Agent attempt 1: [returns truncated JSON] ❌
+  Judge Agent attempt 2: [returns truncated JSON] ❌
+  Judge Agent attempt 3: [returns valid JSON] ✅
+  Validator: ✅ Valid
+  → Apply diff successfully
+```
+
+**Key Difference**:
+- **ROUND retry**: Re-calls Main Agent (expensive, slow)
+- **Judge retry**: Re-calls Judge Agent only (cheap, fast)
+
+**Worst case scenario** (with both retries):
+- 3 ROUNDS × 3 Judge retries = up to 9 Judge Agent calls
+- 3 ROUNDS = 3 Main Agent calls
+
+**Best case scenario**:
+- 1 ROUND × 1 Judge attempt = 1 Main + 1 Judge call total ✅
 
 ### Configuration
 
