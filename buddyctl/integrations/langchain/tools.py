@@ -256,6 +256,74 @@ def apply_hunk(file_lines: List[str], hunk: Hunk) -> List[str]:
     return result
 
 
+def validate_diff_applicability(diff_content: str, file_path: str = None) -> Tuple[bool, str | None]:
+    """Validate if a diff can be applied without actually applying it.
+
+    Performs a complete dry-run of the apply_diff process:
+    1. Parse the diff (valid structure?)
+    2. Read the target file (exists?)
+    3. Match hunks (context found?)
+
+    Args:
+        diff_content: Diff content in unified diff format
+        file_path: Path to the file (optional, extracted from diff if omitted)
+
+    Returns:
+        (is_valid, error_message)
+        - (True, None): Diff is applicable
+        - (False, "Detailed error..."): Diff is invalid with reason
+
+    Examples:
+        >>> diff = "--- a/file.py\\n+++ b/file.py\\n@@ -1,1 +1,1 @@\\n-old\\n+new"
+        >>> validate_diff_applicability(diff)
+        (True, None)
+
+        >>> bad_diff = "--- a/file.py\\n+++ b/file.py\\n@@ -999,1 +999,1 @@"
+        >>> validate_diff_applicability(bad_diff)
+        (False, "Hunk at line 999 does not match the file content...")
+    """
+    try:
+        # 1. Parse the diff
+        try:
+            file_diff = parse_unified_diff(diff_content)
+        except ValueError as e:
+            return (False, f"Diff parse error: {str(e)}")
+
+        # 2. Determine target file
+        target_file = file_path or file_diff.new_path
+        target_path = Path(target_file)
+
+        # 3. Verify file existence
+        if not target_path.exists():
+            return (False, f"Target file not found: {target_file}")
+
+        if not target_path.is_file():
+            return (False, f"Target path is not a file: {target_file}")
+
+        # 4. Read current content
+        try:
+            content = target_path.read_text(encoding="utf-8")
+            file_lines = content.split('\n')
+        except UnicodeDecodeError:
+            return (False, f"File is not valid UTF-8: {target_file}")
+        except PermissionError:
+            return (False, f"Permission denied reading: {target_file}")
+
+        # 5. Try to apply each hunk (DRY RUN)
+        temp_lines = file_lines.copy()
+        for hunk in file_diff.hunks:
+            try:
+                temp_lines = apply_hunk(temp_lines, hunk)
+            except ValueError as e:
+                return (False, f"Hunk validation failed: {str(e)}")
+
+        # If we got here, diff is applicable
+        return (True, None)
+
+    except Exception as e:
+        return (False, f"Unexpected validation error: {str(e)}")
+
+
 @tool
 def read_file(file_path: str) -> str:
     """Read content from a file.

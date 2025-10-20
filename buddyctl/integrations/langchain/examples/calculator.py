@@ -28,6 +28,19 @@ def add_two_numbers(a: float, b: float) -> float:
     return a + b
 
 
+def divide_two_numbers(a: float, b: float) -> float:
+    """Divide two numbers.
+
+    Args:
+        a: First number (dividend)
+        b: Second number (divisor)
+
+    Returns:
+        Division of a by b
+    """
+    return a / b
+
+
 if __name__ == "__main__":
     # Test the function
     result = add_two_numbers(10, 20)
@@ -35,3 +48,9 @@ if __name__ == "__main__":
 
     result = add_two_numbers(5.5, 3.2)
     print(f"5.5 + 3.2 = {result}")
+
+    result = divide_two_numbers(10, 20)
+    print(f"10 / 20 = {result}")
+    
+    result = divide_two_numbers(5.5, 3.2)
+    print(f"5.5 / 3.2 = {result}")

@@ -564,6 +564,10 @@ class InteractiveShell:
 
             # Build enhanced message with file contents
             enhanced_message = message
+
+            # Import formatter
+            from ..integrations.langchain.context_formatter import format_file_with_line_numbers_safe
+
             for file_path, content in file_contents.items():
                 if content is not None:
                     # Show which file was loaded
@@ -573,8 +577,9 @@ class InteractiveShell:
                         HTML(f"  • <ansiblue>@{file_path}</ansiblue> ({size_str})")
                     )
 
-                    # Add file content to message
-                    file_section = f"\n\n--- Content of @{file_path} ---\n{content}\n--- End of @{file_path} ---"
+                    # Add file content to message WITH LINE NUMBERS
+                    formatted_content = format_file_with_line_numbers_safe(file_path)
+                    file_section = f"\n\n{formatted_content}"
                     enhanced_message += file_section
                     loaded_files.append(file_path)
                 else:
