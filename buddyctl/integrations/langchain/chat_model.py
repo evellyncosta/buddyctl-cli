@@ -340,8 +340,27 @@ class StackSpotChatModel(BaseChatModel):
             # Call StackSpot API (non-streaming)
             response_data = self._post_json(url, payload)
 
+            # Validate response
+            if response_data is None:
+                raise ValueError("StackSpot API returned None response")
+
             # Convert StackSpot response to LangChain format
-            message_content = response_data.get("message", "")
+            message_content = response_data.get("message")
+
+            # Check if message is None (content filter issue)
+            if message_content is None:
+                self._logger.warning(f"StackSpot returned null message. Full response: {response_data}")
+                # Try to extract useful info from response
+                tokens = response_data.get("tokens", {})
+                output_tokens = tokens.get("output", 0) if tokens else 0
+
+                error_msg = (
+                    f"StackSpot returned null message (likely filtered by content policy). "
+                    f"Output tokens generated: {output_tokens}. "
+                    f"This usually happens with Judge Agents. Consider using direct validation instead."
+                )
+                raise ValueError(error_msg)
+
             self._logger.debug(f"StackSpot response: {message_content[:200]}...")
 
             message = AIMessage(content=message_content)

@@ -29,44 +29,84 @@ def add_two_numbers(a: float, b: float) -> float:
 
 
 def subtract_two_numbers(a: float, b: float) -> float:
-    """Subtract two numbers.
+    """Subtract second number from first number.
 
     Args:
         a: First number (minuend)
         b: Second number (subtrahend)
 
     Returns:
-        Subtraction of b from a
+        Difference of a and b
     """
     return a - b
 
 
+def multiply_two_numbers(a: float, b: float) -> float:
+    """Multiply two numbers together.
+
+    Args:
+        a: First number
+        b: Second number
+
+    Returns:
+        Product of a and b
+    """
+    return a * b
+
+
 def divide_two_numbers(a: float, b: float) -> float:
-    """Divide two numbers.
+    """Divide first number by second number.
 
     Args:
         a: First number (dividend)
         b: Second number (divisor)
 
     Returns:
-        Division of a by b
+        Quotient of a and b
+
+    Raises:
+        ValueError: If divisor is zero
     """
+    if b == 0:
+        raise ValueError("Cannot divide by zero")
     return a / b
 
 
 if __name__ == "__main__":
-    # Test the function
-    result = add_two_numbers(10, 20)
-    print(f"10 + 20 = {result}")
-
-    result = add_two_numbers(5.5, 3.2)
-    print(f"5.5 + 3.2 = {result}")
-
-    result = divide_two_numbers(10, 20)
-    print(f"10 / 20 = {result}")
+    # Test all four operations with two numbers
+    num1, num2 = 10, 20
     
-    result = divide_two_numbers(5.5, 3.2)
-    print(f"5.5 / 3.2 = {result}")
+    # Addition
+    result = add_two_numbers(num1, num2)
+    print(f"{num1} + {num2} = {result}")
     
-    result = subtract_two_numbers(10, 3)
-    print(f"10 - 3 = {result}")
+    # Subtraction
+    result = subtract_two_numbers(num1, num2)
+    print(f"{num1} - {num2} = {result}")
+    
+    # Multiplication
+    result = multiply_two_numbers(num1, num2)
+    print(f"{num1} * {num2} = {result}")
+    
+    # Division
+    result = divide_two_numbers(num1, num2)
+    print(f"{num1} / {num2} = {result}")
+    
+    print()  # Empty line for separation
+    
+    # Test with decimal numbers
+    num1, num2 = 5.5, 2.2
+    
+    print(f"Testing with decimal numbers: {num1} and {num2}")
+    print(f"{num1} + {num2} = {add_two_numbers(num1, num2)}")
+    print(f"{num1} - {num2} = {subtract_two_numbers(num1, num2)}")
+    print(f"{num1} * {num2} = {multiply_two_numbers(num1, num2)}")
+    print(f"{num1} / {num2} = {divide_two_numbers(num1, num2)}")
+    
+    # Test division by zero handling
+    print()
+    try:
+        result = divide_two_numbers(10, 0)
+        print(f"10 / 0 = {result}")
+    except ValueError as e:
+        print(f"Error: {e}")

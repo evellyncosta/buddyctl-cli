@@ -221,39 +221,34 @@ class StackSpotAdapter:
         """
         Retorna executor com tools para StackSpot.
 
-        StackSpot usa Judge Agent pattern:
-        - Prioridade 1: StackSpotChain (workflow declarativo LCEL)
-        - Fallback: ReAct Agent
-
-        Decisão é TRANSPARENTE - usuário não precisa saber qual foi usada.
+        StackSpot agora usa SEARCH/REPLACE pattern (single-stage):
+        - Sempre usa StackSpotChain (SEARCH/REPLACE + validação local)
+        - Remove Judge Agent (não funciona, conforme POCs 2 e 3)
 
         Args:
             tools: Lista de tools disponíveis
 
         Returns:
-            ExecutorProtocol: Executor configurado (StackSpotChain ou ReAct)
+            ExecutorProtocol: StackSpotChain configurado
 
         Raises:
             ValueError: Se configuração está incorreta
         """
-        judge_agent_id = self._get_judge_agent_id()
         main_agent_id = self.config.get_default_agent_id()
 
-        if judge_agent_id and main_agent_id:
-            # Usar StackSpotChain (preferred)
-            self.logger.info(f"Using StackSpotChain with Judge Agent: {judge_agent_id}")
-            return self._create_stackspot_chain(
-                main_agent_id=main_agent_id,
-                judge_agent_id=judge_agent_id,
-                tools=tools
+        if not main_agent_id:
+            raise ValueError(
+                "No default agent_id configured for StackSpot. "
+                "Use /agent-default <id> to set one."
             )
-        else:
-            # Fallback: ReAct Agent
-            self.logger.warning(
-                "Judge Agent not configured. Falling back to ReAct Agent. "
-                "For better results, configure Judge Agent with /judge-agent <id>"
-            )
-            return self._create_react_executor(tools)
+
+        # Always use StackSpotChain with SEARCH/REPLACE pattern
+        self.logger.info(f"Using StackSpotChain (SEARCH/REPLACE mode) with agent: {main_agent_id}")
+        return self._create_stackspot_chain(
+            main_agent_id=main_agent_id,
+            judge_agent_id=None,  # Not used anymore
+            tools=tools
+        )
 
     def _get_judge_agent_id(self) -> Optional[str]:
         """
@@ -281,12 +276,13 @@ class StackSpotAdapter:
         judge_agent_id: str,
         tools: List[BaseTool]
     ) -> "StackSpotChain":
-        """Create StackSpot Chain (workflow declarativo LCEL)."""
+        """Create StackSpot Chain (SEARCH/REPLACE pattern - single stage)."""
         from ....integrations.langchain.chains.stackspot_chain import StackSpotChain
 
+        # Note: judge_agent_id parameter kept for compatibility but not used
+        # StackSpotChain now uses single-stage SEARCH/REPLACE pattern
         return StackSpotChain(
             main_agent_id=main_agent_id,
-            judge_agent_id=judge_agent_id,
             tools=tools
         )
 

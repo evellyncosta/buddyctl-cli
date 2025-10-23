@@ -26,7 +26,7 @@ pip install --upgrade buddyctl
 
 ### Setting up StackSpot Provider
 
-BuddyCtl currently supports **StackSpot AI** as the LLM provider. You'll need to configure two agents in your StackSpot account:
+BuddyCtl currently supports **StackSpot AI** as the LLM provider. You'll need to configure one agent in your StackSpot account:
 
 #### 1. Get StackSpot Credentials
 
@@ -35,23 +35,17 @@ Generate your API credentials in your [StackSpot account](https://stackspot.com)
 - Client Secret
 - Realm
 
-#### 2. Create Two Agents in StackSpot
+#### 2. Create Main Agent in StackSpot
 
-You need to create **two separate agents** in StackSpot AI:
+You need to create **one agent** in StackSpot AI:
 
 **Main Agent (Coder Agent)**
-- **Purpose**: Generates responses and code modifications
+- **Purpose**: Generates responses and code modifications using SEARCH/REPLACE blocks
 - **Recommended Prompt**: Use the validated prompt from [`prompts/main_agent.md`](prompts/main_agent.md)
 - **Custom Prompts**: You can use your own prompt if preferred
-- **Characteristics**: Natural, conversational tone; generates complete unified diffs
+- **Characteristics**: Natural, conversational tone; generates SEARCH/REPLACE blocks for code modifications
 
-**Judge Agent**
-- **Purpose**: Analyzes Main Agent responses and decides when to execute tools
-- **Recommended Prompt**: Use the validated prompt from [`prompts/judge_agent.md`](prompts/judge_agent.md)
-- **Custom Prompts**: You can use your own prompt if preferred
-- **Characteristics**: Analytical tone; returns structured JSON decisions
-
-> **Note**: The validated prompts in the `prompts/` directory are tested and optimized for the two-stage tool calling pattern. While you can use custom prompts, the provided ones are recommended for best results.
+> **Note**: The validated prompt in `prompts/main_agent.md` is tested and optimized for the SEARCH/REPLACE pattern. While you can use custom prompts, the provided one is recommended for best results.
 
 #### 3. Configure Environment Variables
 
@@ -67,16 +61,18 @@ STACKSPOT_REALM=your_realm_here
 STACKSPOT_AUTH_URL=https://idm.stackspot.com
 STACKSPOT_API_URL=https://genai-inference-app.stackspot.com
 
-# Required: Agent IDs (from StackSpot AI dashboard)
+# Required: Main Agent ID (from StackSpot AI dashboard)
 STACKSPOT_CODER_ID=your_main_agent_id_here
-STACKSPOT_JUDGE_AGENT_ID=your_judge_agent_id_here
+
+# Deprecated (no longer used)
+# STACKSPOT_JUDGE_AGENT_ID=your_judge_agent_id_here
 ```
 
-**All variables are required.** BuddyCtl uses both agents together in a two-stage pattern for improved reliability when modifying code.
+**Authentication and Main Agent ID are required.** BuddyCtl uses a single-stage SEARCH/REPLACE pattern with local validation for fast and reliable code modifications.
 
 #### Architecture Details
 
-For more information about how the two-stage tool calling pattern works, see [ARCHITECTURE.md](ARCHITECTURE.md#judge-agent-pattern-two-stage-tool-calling).
+For more information about how the SEARCH/REPLACE pattern works, see [ARCHITECTURE.md](ARCHITECTURE.md#searchreplace-pattern-single-stage-tool-calling).
 
 ---
 
@@ -102,9 +98,9 @@ buddyctl --help
 - 🔐 OAuth2 authentication with StackSpot
 - 🤖 Agent management and configuration
 - 💬 Interactive chat with streaming responses
-- 🛠️ **Two-stage tool calling** with Judge Agent pattern
-- 🔄 Automatic diff validation and retry logic (up to 3 attempts)
-- 📝 Code modification with unified diff format
+- 🛠️ **Single-stage SEARCH/REPLACE pattern** with local validation
+- 🔄 Automatic validation and retry logic (up to 3 attempts)
+- 📝 Code modification with SEARCH/REPLACE blocks (50% faster than previous approach)
 - 📁 File autocompletion with @ navigation
 - 🔍 Real-time file indexing and suggestions
 - 📋 Command history and auto-suggestions
@@ -151,26 +147,29 @@ pip install buddyctl
 pip install git+https://github.com/evellyncosta/buddyctl-cli.git
 
 # Use the LangChain integration
+import os
 from buddyctl.integrations.langchain import StackSpotChatModel
 from buddyctl.integrations.langchain.chains import StackSpotChain
-from buddyctl.integrations.langchain.tools import read_file, apply_diff
+from buddyctl.integrations.langchain.tools import read_file
 
-# Create a StackSpot chat model
-model = StackSpotChatModel(agent_id="your-agent-id")
+# Create a StackSpot chat model using environment variable
+model = StackSpotChatModel(
+    agent_id=os.getenv("STACKSPOT_CODER_ID")
+)
 response = model.invoke("Explain Python decorators")
 
-# Use Judge Agent pattern for code modifications
+# Use SEARCH/REPLACE pattern for code modifications
 chain = StackSpotChain(
-    main_agent_id="your-main-agent-id",
-    judge_agent_id="your-judge-agent-id",
-    tools=[read_file, apply_diff]
+    main_agent_id=os.getenv("STACKSPOT_CODER_ID"),
+    tools=[read_file]  # Tools available to the chain
 )
 
 result = chain.invoke("Add type hints to calculator.py")
 
-print(result["output"])          # Final response
-print(result["tool_calls_made"]) # Tools that were executed
-print(result["iterations"])      # Number of cycles
+print(result["output"])           # Final response
+print(result["tool_calls_made"])  # Tools that were executed
+print(result["blocks_applied"])   # Number of SEARCH/REPLACE blocks applied
+print(result["validation_rounds"]) # Number of validation rounds (0 = success first try)
 ```
 
 ## Troubleshooting

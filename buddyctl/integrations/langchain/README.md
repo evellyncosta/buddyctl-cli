@@ -12,10 +12,11 @@ The main goal is to enable complex workflows by coordinating multiple specialize
 LangChain-compatible wrapper for StackSpot AI agents.
 
 ```python
+import os
 from buddyctl.langchain_integration import StackSpotChatModel
 
 model = StackSpotChatModel(
-    agent_id="your-agent-id",
+    agent_id=os.getenv("STACKSPOT_CODER_ID"),
     streaming=False
 )
 
@@ -27,11 +28,12 @@ print(response.content)
 Orchestrates two agents: Coder (generates code) → Differ (produces diff).
 
 ```python
+import os
 from buddyctl.langchain_integration import create_coder_differ_chain
 
 chain = create_coder_differ_chain(
-    coder_agent_id="coder-123",
-    differ_agent_id="differ-456"
+    coder_agent_id=os.getenv("STACKSPOT_CODER_ID"),
+    differ_agent_id=os.getenv("STACKSPOT_DIFFER_ID")
 )
 
 result = chain.invoke({
@@ -46,7 +48,7 @@ print(result["diff"])  # Git-style diff output
 LangChain tool for reading source code files.
 
 ```python
-from buddyctl.langchain_integration import read_file
+from buddyctl.integrations.langchain.tools import read_file
 
 content = read_file.invoke({"file_path": "src/main.py"})
 ```
@@ -139,11 +141,14 @@ User Input (file + instruction)
 ### Custom Chain
 
 ```python
-from buddyctl.langchain_integration import StackSpotChatModel
+import os
+from buddyctl.integrations.langchain import StackSpotChatModel
 from langchain_core.prompts import ChatPromptTemplate
 
-# Create custom agent
-analyzer = StackSpotChatModel(agent_id="analyzer-id")
+# Create custom agent using environment variable
+analyzer = StackSpotChatModel(
+    agent_id=os.getenv("STACKSPOT_ANALYZER_ID")
+)
 
 # Create custom prompt
 prompt = ChatPromptTemplate.from_messages([
