@@ -35,6 +35,18 @@ class SearchReplaceBlock:
         return f"SearchReplaceBlock(search='{search_preview}', replace='{replace_preview}'{file_info})"
 
 
+@dataclass
+class NewFileBlock:
+    """Represents a new file to be created."""
+    file_path: str
+    content: str
+    language: str | None = None  # Optional: py, kt, js, etc.
+
+    def __str__(self) -> str:
+        preview = self.content[:50] + "..." if len(self.content) > 50 else self.content
+        return f"NewFileBlock(file='{self.file_path}', content='{preview}')"
+
+
 class StackSpotChain(BaseChain):
     """
     Chain simplificada para StackSpot com SEARCH/REPLACE pattern.
@@ -45,7 +57,8 @@ class StackSpotChain(BaseChain):
     def __init__(
         self,
         main_agent_id: str,
-        tools: List[BaseTool]
+        tools: List[BaseTool],
+        file_indexer: Any = None
     ):
         """
         Initialize StackSpot Chain with SEARCH/REPLACE pattern.
@@ -53,6 +66,7 @@ class StackSpotChain(BaseChain):
         Args:
             main_agent_id: StackSpot agent ID for main agent
             tools: Available tools (kept for compatibility with base class)
+            file_indexer: Optional FileIndexer instance for index updates
         """
         super().__init__(tools)
 
@@ -63,6 +77,9 @@ class StackSpotChain(BaseChain):
             agent_id=main_agent_id,
             streaming=False
         )
+
+        # Store file indexer reference for NEW_FILE support
+        self.file_indexer = file_indexer
 
     def invoke(self, user_input: str) -> Dict[str, Any]:
         """
@@ -105,13 +122,19 @@ class StackSpotChain(BaseChain):
 
             self.logger.debug(f"Main Agent response length: {len(main_response)}")
 
-            # 2. Extract SEARCH/REPLACE blocks
-            self.logger.debug("Step 2: Extracting SEARCH/REPLACE blocks")
-            blocks = self._extract_search_replace_blocks(main_response)
+            # 2. Extract BOTH types of blocks
+            self.logger.debug("Step 2: Extracting blocks")
+            search_replace_blocks = self._extract_search_replace_blocks(main_response)
+            new_file_blocks = self._extract_new_files(main_response)
 
-            if not blocks:
+            self.logger.info(
+                f"Extracted {len(new_file_blocks)} NEW_FILE block(s) and "
+                f"{len(search_replace_blocks)} SEARCH/REPLACE block(s)"
+            )
+
+            if not new_file_blocks and not search_replace_blocks:
                 # No modifications - just conversational response
-                self.logger.debug("No SEARCH/REPLACE blocks found, returning conversational response")
+                self.logger.debug("No blocks found, returning conversational response")
                 return {
                     "output": main_response,
                     "tool_calls_made": [],
@@ -119,7 +142,82 @@ class StackSpotChain(BaseChain):
                     "blocks_applied": 0
                 }
 
-            # 3. Determine file paths for blocks (HYBRID MODE)
+            # 3. Process NEW_FILE blocks FIRST (create files)
+            created_files = {}
+            if new_file_blocks:
+                self.logger.debug("Step 3a: Validating and applying NEW_FILE blocks")
+
+                is_valid, validation_error = self._validate_new_files(
+                    new_file_blocks,
+                    project_root=Path.cwd()
+                )
+
+                if is_valid:
+                    try:
+                        created_files = self._apply_new_files(
+                            new_file_blocks,
+                            project_root=Path.cwd()
+                        )
+
+                        # UPDATE INDEX (intelligent: incremental or full)
+                        self._update_file_index(list(created_files.keys()))
+
+                        self.logger.info(f"✅ Created {len(created_files)} file(s)")
+
+                    except Exception as e:
+                        self.logger.error(f"Error creating files: {e}")
+                        MessageBox.error(
+                            "ERRO: Falha ao criar arquivos",
+                            str(e)
+                        )
+                        return {
+                            "output": main_response,
+                            "error": str(e),
+                            "validation_rounds": round_number - 1,
+                            "blocks_applied": 0
+                        }
+                else:
+                    # NEW_FILE validation failed - retry with error message
+                    self.logger.warning(f"NEW_FILE validation failed: {validation_error}")
+                    # Continue to retry logic at end of loop
+                    if round_number == MAX_ROUNDS:
+                        MessageBox.error(
+                            f"ERRO: Falha ao validar NEW_FILE após {MAX_ROUNDS} tentativas",
+                            f"Erro: {validation_error}"
+                        )
+                        return {
+                            "output": main_response,
+                            "error": validation_error,
+                            "validation_rounds": MAX_ROUNDS,
+                            "blocks_applied": 0
+                        }
+                    else:
+                        MessageBox.warning(
+                            f"RETRY: NEW_FILE blocos inválidos, tentando ROUND {round_number + 1}/{MAX_ROUNDS}",
+                            f"Razão: {validation_error}"
+                        )
+                        continue  # Retry
+
+            # Skip SEARCH/REPLACE processing if no blocks
+            if not search_replace_blocks:
+                # Only NEW_FILE blocks were processed
+                if created_files:
+                    MessageBox.success(
+                        f"SUCESSO: {len(created_files)} arquivo(s) criado(s)",
+                        f"Arquivos: {', '.join(created_files.keys())}"
+                    )
+                    return {
+                        "output": main_response,
+                        "tool_calls_made": [
+                            {"name": "create_files", "args": {"files": created_files}}
+                        ],
+                        "validation_rounds": round_number - 1,
+                        "files_created": len(created_files),
+                        "blocks_applied": 0
+                    }
+
+            # 4. Determine file paths for SEARCH/REPLACE blocks (HYBRID MODE)
+            blocks = search_replace_blocks
             self.logger.debug("Step 3: Determining file paths for blocks (hybrid mode)")
 
             # Extract all files sent in context
@@ -172,31 +270,46 @@ class StackSpotChain(BaseChain):
                 self.logger.debug("Step 5: Applying blocks")
 
                 try:
-                    affected_files = self._apply_multi_file_blocks(blocks)
+                    modified_files = self._apply_multi_file_blocks(blocks)
 
-                    # Build success message
-                    if len(affected_files) == 1:
-                        files_msg = f"Arquivo: {list(affected_files.keys())[0]}"
-                    else:
-                        files_msg = f"Arquivos: {', '.join(affected_files.keys())}"
+                    # Build success message combining both operations
+                    all_affected_files = {**created_files, **modified_files}
 
-                    MessageBox.success(
-                        f"SUCESSO: {len(blocks)} modificação(ões) aplicada(s) em {len(affected_files)} arquivo(s) (round {round_number})",
-                        files_msg
-                    )
+                    if created_files and modified_files:
+                        # Both created and modified
+                        MessageBox.success(
+                            f"SUCESSO: {len(created_files)} arquivo(s) criado(s), {len(blocks)} modificação(ões) aplicada(s)",
+                            f"Arquivos afetados: {', '.join(all_affected_files.keys())}"
+                        )
+                    elif modified_files:
+                        # Only modified
+                        if len(modified_files) == 1:
+                            files_msg = f"Arquivo: {list(modified_files.keys())[0]}"
+                        else:
+                            files_msg = f"Arquivos: {', '.join(modified_files.keys())}"
+
+                        MessageBox.success(
+                            f"SUCESSO: {len(blocks)} modificação(ões) aplicada(s) em {len(modified_files)} arquivo(s) (round {round_number})",
+                            files_msg
+                        )
+
+                    tool_calls = []
+                    if created_files:
+                        tool_calls.append({"name": "create_files", "args": {"files": created_files}})
+                    if modified_files:
+                        tool_calls.append({
+                            "name": "apply_search_replace",
+                            "args": {
+                                "files": modified_files,
+                                "blocks_count": len(blocks)
+                            }
+                        })
 
                     return {
                         "output": main_response,
-                        "tool_calls_made": [
-                            {
-                                "name": "apply_search_replace",
-                                "args": {
-                                    "files": affected_files,
-                                    "blocks_count": len(blocks)
-                                }
-                            }
-                        ],
+                        "tool_calls_made": tool_calls,
                         "validation_rounds": round_number - 1,
+                        "files_created": len(created_files),
                         "blocks_applied": len(blocks)
                     }
                 except Exception as e:
@@ -358,6 +471,39 @@ class StackSpotChain(BaseChain):
 
         return blocks
 
+    def _extract_new_files(self, response: str) -> List[NewFileBlock]:
+        """
+        Extract NEW_FILE blocks from Main Agent response.
+
+        Pattern:
+            NEW_FILE: path/to/file.py
+            ```python
+            content here
+            ```
+
+        Returns:
+            List of NewFileBlock objects
+        """
+        blocks = []
+
+        # Pattern: NEW_FILE: <path> followed by code block
+        pattern = r'NEW_FILE:\s*([^\n]+)\s*```(\w*)\n(.*?)```'
+        matches = re.findall(pattern, response, re.DOTALL)
+
+        for file_path, language, content in matches:
+            file_path = file_path.strip()
+            language = language.strip() if language else None
+
+            blocks.append(NewFileBlock(
+                file_path=file_path,
+                content=content,
+                language=language
+            ))
+
+            self.logger.debug(f"Extracted NEW_FILE block: {file_path}")
+
+        return blocks
+
     def _validate_search_replace_blocks(
         self,
         blocks: List[SearchReplaceBlock],
@@ -457,6 +603,60 @@ class StackSpotChain(BaseChain):
                 return (False, error_msg)
 
         self.logger.debug(f"All {len(blocks)} block(s) validated successfully across {len(files_content)} file(s)")
+        return (True, None)
+
+    def _validate_new_files(
+        self,
+        blocks: List[NewFileBlock],
+        project_root: Path | None = None
+    ) -> tuple[bool, str | None]:
+        """
+        Validate NEW_FILE blocks before creation.
+
+        Validates:
+            1. Parent directory exists (or can be created)
+            2. File does NOT already exist
+            3. Path is within project boundaries (security)
+
+        Returns:
+            (is_valid, error_message)
+        """
+        if project_root is None:
+            project_root = Path.cwd()
+
+        for i, block in enumerate(blocks, 1):
+            file_path = Path(block.file_path)
+
+            # Security: ensure path is within project
+            try:
+                abs_path = (project_root / file_path).resolve()
+                if not abs_path.is_relative_to(project_root):
+                    return (False,
+                        f"NEW_FILE block {i}: Path '{file_path}' is outside project boundaries. "
+                        f"Security violation prevented."
+                    )
+            except (ValueError, OSError) as e:
+                return (False, f"NEW_FILE block {i}: Invalid path '{file_path}': {e}")
+
+            # Check if file already exists
+            if abs_path.exists():
+                return (False,
+                    f"NEW_FILE block {i}: File '{file_path}' already exists. "
+                    f"To modify existing files, use SEARCH/REPLACE blocks instead."
+                )
+
+            # Parent directory validation (will be created if doesn't exist)
+            parent_dir = abs_path.parent
+            try:
+                # Check if we can create parent directory
+                if not parent_dir.exists():
+                    self.logger.debug(f"Parent directory {parent_dir} will be created")
+            except (PermissionError, OSError) as e:
+                return (False,
+                    f"NEW_FILE block {i}: Cannot access parent directory '{parent_dir}': {e}"
+                )
+
+        self.logger.debug(f"All {len(blocks)} NEW_FILE block(s) validated successfully")
         return (True, None)
 
     def _apply_search_replace_blocks(
@@ -581,6 +781,97 @@ class StackSpotChain(BaseChain):
             f"Successfully applied {len(blocks)} block(s) across {len(affected_files)} file(s)"
         )
         return affected_files
+
+    def _apply_new_files(
+        self,
+        blocks: List[NewFileBlock],
+        project_root: Path | None = None
+    ) -> Dict[str, int]:
+        """
+        Apply NEW_FILE blocks (create files).
+
+        Args:
+            blocks: List of NewFileBlock objects
+            project_root: Project root directory
+
+        Returns:
+            Dictionary mapping file_path to 1 (created)
+            Example: {"src/utils/helper.py": 1, "tests/test_helper.py": 1}
+
+        Raises:
+            IOError: If file creation fails
+        """
+        if project_root is None:
+            project_root = Path.cwd()
+
+        created_files: Dict[str, int] = {}
+
+        for i, block in enumerate(blocks, 1):
+            file_path = project_root / block.file_path
+
+            self.logger.info(f"Creating new file: {block.file_path}")
+
+            try:
+                # Create parent directories if needed
+                file_path.parent.mkdir(parents=True, exist_ok=True)
+
+                # Write file content
+                with open(file_path, 'w', encoding='utf-8') as f:
+                    f.write(block.content)
+
+                self.logger.info(f"✅ Created file: {block.file_path} ({len(block.content)} characters)")
+                created_files[block.file_path] = 1
+
+            except (IOError, PermissionError, OSError) as e:
+                error_msg = f"Failed to create file {block.file_path}: {e}"
+                self.logger.error(error_msg)
+                raise IOError(error_msg) from e
+
+        self.logger.info(f"Successfully created {len(created_files)} new file(s)")
+        return created_files
+
+    def _update_file_index(self, new_files: List[str]) -> None:
+        """
+        Update file index after creating new files.
+
+        Strategy: INTELLIGENT UPDATE
+        - Try incremental update first (fast)
+        - Fallback to full reindex if incremental fails (reliable)
+        - Ensures index is always in sync with filesystem
+
+        Args:
+            new_files: List of file paths that were created
+        """
+        if not self.file_indexer:
+            self.logger.warning("No file_indexer available, skipping index update")
+            return
+
+        self.logger.info(f"📝 Updating file index after creating {len(new_files)} file(s)...")
+
+        try:
+            # Try incremental update first (performance optimization)
+            if hasattr(self.file_indexer, 'add_files_to_index'):
+                self.logger.debug("Attempting incremental index update...")
+                success = self.file_indexer.add_files_to_index(new_files)
+
+                if success:
+                    self.logger.info("✅ File index updated incrementally")
+                    return
+                else:
+                    self.logger.warning("Incremental update failed, falling back to full reindex")
+
+            # Fallback: full reindex
+            self.logger.debug("Performing full reindex...")
+            success = self.file_indexer.build_index()
+
+            if success:
+                self.logger.info("✅ File index updated successfully (full reindex)")
+            else:
+                self.logger.warning("❌ File index update failed")
+
+        except Exception as e:
+            self.logger.error(f"Error updating file index: {e}")
+            # Non-fatal: index update failure doesn't prevent file creation
 
     def _extract_file_path_from_input(self, user_input: str) -> str | None:
         """
@@ -882,4 +1173,4 @@ REMEMBER: The SEARCH block must match the file EXACTLY, character-by-character, 
         return corrected_response
 
 
-__all__ = ["StackSpotChain", "SearchReplaceBlock"]
+__all__ = ["StackSpotChain", "SearchReplaceBlock", "NewFileBlock"]

@@ -64,6 +64,7 @@ class KotlinImportExtractor:
         2. src/main/java/com/example/Foo.java (Java Maven/Gradle)
         3. src/com/example/Foo.kt (alternative)
         4. src/com/example/Foo.java (alternative)
+        5. Any subdirectory containing the package structure (e.g., .doc/test-kotlin/com/example/Foo.kt)
 
         Args:
             import_path: Java package path (e.g., 'com.example.service.UserService')
@@ -92,6 +93,17 @@ class KotlinImportExtractor:
         for path in search_paths:
             if path.exists() and path.is_file():
                 return path
+
+        # Fallback: Search for the file anywhere in the project using glob
+        # This handles custom directory structures like .doc/test-kotlin/
+        # Only search for the filename pattern to improve performance
+        for ext in ['.kt', '.java']:
+            # Use glob to find any matching file with the correct package structure
+            pattern = f"**/{file_path}{ext}"
+            matches = list(project_root.glob(pattern))
+            if matches:
+                # Return the first match (there should typically be only one)
+                return matches[0]
 
         return None
 

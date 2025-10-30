@@ -407,6 +407,96 @@ class FileIndexer:
         except (OSError, PermissionError, UnicodeDecodeError):
             return None
 
+    def add_files_to_index(self, file_paths: List[str]) -> bool:
+        """
+        Add new files to existing index incrementally.
+
+        This is a performance optimization to avoid full reindex on small changes.
+
+        Args:
+            file_paths: List of file paths (relative or absolute) to add
+
+        Returns:
+            True if incremental update succeeded, False if full reindex needed
+        """
+        if not self.file_tree:
+            return False
+
+        try:
+            for file_path_str in file_paths:
+                file_path = Path(file_path_str)
+
+                # Convert to absolute path if needed
+                if not file_path.is_absolute():
+                    abs_path = (self.root_path / file_path).resolve()
+                else:
+                    abs_path = file_path.resolve()
+
+                # Skip if should be ignored
+                if self._should_ignore_file(abs_path):
+                    continue
+
+                # Add to tree structure
+                self._add_file_to_tree(abs_path, self.root_path)
+
+            return True
+
+        except Exception as e:
+            print(f"⚠️ Incremental update failed: {e}")
+            return False
+
+    def _add_file_to_tree(self, file_path: Path, root_path: Path) -> None:
+        """
+        Add a single file to the existing tree structure.
+
+        Navigates the tree to find the correct parent directory and inserts the file.
+        Creates intermediate directory nodes if needed.
+        """
+        rel_path = file_path.relative_to(root_path)
+        parts = rel_path.parts
+
+        # Navigate to parent directory in tree
+        current = self.file_tree
+        for part in parts[:-1]:  # All except file name
+            # Find or create directory node
+            found = False
+            if "children" in current:
+                for child in current["children"]:
+                    if child["name"] == part and child["type"] == "folder":
+                        current = child
+                        found = True
+                        break
+
+            if not found:
+                # Create missing directory node
+                new_dir = {
+                    "name": part,
+                    "type": "folder",
+                    "path": str(Path(current.get("path", "")) / part),
+                    "children": []
+                }
+                if "children" not in current:
+                    current["children"] = []
+                current["children"].append(new_dir)
+                current = new_dir
+
+        # Add file to parent directory
+        file_node = {
+            "name": parts[-1],
+            "type": "file",
+            "path": str(rel_path)
+        }
+
+        if "children" not in current:
+            current["children"] = []
+
+        # Check if file already exists in index
+        existing = [c for c in current["children"] if c["name"] == parts[-1]]
+        if not existing:
+            current["children"].append(file_node)
+            # Keep children sorted (dirs first, then files)
+            current["children"].sort(key=lambda x: (x["type"] != "folder", x["name"]))
+
     def cleanup(self):
         """Clean up temporary files."""
         if self.index_file and self.index_file.exists():

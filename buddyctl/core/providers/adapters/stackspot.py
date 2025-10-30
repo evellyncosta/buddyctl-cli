@@ -43,7 +43,17 @@ class StackSpotAdapter:
         self.config = config
         self.auth = auth or StackSpotAuth()
         self._model: Optional[StackSpotChatModel] = None
+        self.file_indexer = None  # Will be set by InteractiveShell
         self.logger = logging.getLogger(__name__)
+
+    def set_file_indexer(self, file_indexer) -> None:
+        """
+        Set file indexer for NEW_FILE support.
+
+        Args:
+            file_indexer: FileIndexer instance
+        """
+        self.file_indexer = file_indexer
 
     @property
     def name(self) -> str:
@@ -283,7 +293,8 @@ class StackSpotAdapter:
         # StackSpotChain now uses single-stage SEARCH/REPLACE pattern
         return StackSpotChain(
             main_agent_id=main_agent_id,
-            tools=tools
+            tools=tools,
+            file_indexer=self.file_indexer  # Pass file indexer for NEW_FILE support
         )
 
     def _create_react_executor(self, tools: List[BaseTool]) -> "AgentExecutor":

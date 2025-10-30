@@ -469,6 +469,10 @@ class InteractiveShell:
             current_provider = self.config.get_current_provider()
             provider_adapter = self.provider_manager.get_adapter(current_provider)
 
+            # Set file indexer for NEW_FILE support (Feature 29)
+            if hasattr(provider_adapter, 'set_file_indexer'):
+                provider_adapter.set_file_indexer(self.file_indexer)
+
             # Get executor with tools (SEMPRE, transparente)
             # Provider adapter decide internamente se usa Judge Agent, ReAct, ou native tools
             executor = provider_adapter.get_model_with_tools(tools=tools)
