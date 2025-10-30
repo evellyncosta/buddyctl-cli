@@ -473,9 +473,34 @@ class InteractiveShell:
             # Provider adapter decide internamente se usa Judge Agent, ReAct, ou native tools
             executor = provider_adapter.get_model_with_tools(tools=tools)
 
+            # Feature 27: Enrich with dependencies (automatic multi-file support)
+            # Check if executor is StackSpotChain and has enrich_with_dependencies method
+            enriched_message = processed_message
+            try:
+                from pathlib import Path
+                from ..integrations.langchain.chains.stackspot_chain import StackSpotChain
+
+                if isinstance(executor, StackSpotChain):
+                    # Try to enrich with dependencies
+                    project_root = Path.cwd()
+                    enriched_message = executor.enrich_with_dependencies(
+                        processed_message,
+                        project_root=project_root
+                    )
+
+                    # Log if dependencies were added
+                    if len(enriched_message) > len(processed_message):
+                        added_chars = len(enriched_message) - len(processed_message)
+                        print_formatted_text(
+                            HTML(f"<ansicyan>🔗 Detected dependencies (+{added_chars} chars context)</ansicyan>")
+                        )
+            except Exception as e:
+                # If enrichment fails, just use original message
+                self.logger.debug(f"Dependency enrichment failed (using original message): {e}")
+
             # Log request
             from ..core.logging import log_agent_request, log_agent_response
-            log_agent_request(self.logger, f"{current_provider} executor", processed_message)
+            log_agent_request(self.logger, f"{current_provider} executor", enriched_message)
 
             # Show loading indicator
             print_formatted_text(
@@ -483,7 +508,7 @@ class InteractiveShell:
             )
 
             # Execute (unified interface - Feature 17)
-            result = executor.invoke(processed_message)
+            result = executor.invoke(enriched_message)
 
             # Log response
             log_agent_response(self.logger, f"{current_provider} executor", result["output"])

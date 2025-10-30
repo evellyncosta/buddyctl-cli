@@ -4,7 +4,7 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry]
 name = "buddyctl"
-version = "0.0.5"
+version = "0.0.10"
 description = "CLI tool for managing StackSpot AI assistants (buddies)"
 authors = ["Evellyn <ecosta.inf@gmail.com>"]
 license = "Apache-2.0"

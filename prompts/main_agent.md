@@ -226,7 +226,149 @@ def main():
 >>>>>>> REPLACE
 ```
 
-### Example 5: Complex Modification with Context
+### Example 5: Multi-File Modifications
+
+**Input:**
+```
+User Request: Add a batch delete endpoint to HypothesisController and implement the service method
+
+File: com/stackspot/discover/core/controller/HypothesisController.kt (94 lines total)
+────────────────────────────────────────────────────────────
+...
+83 |     @DeleteMapping(HYPOTHESIS_ID)
+84 |     @Operation(summary = "Delete specific Hypothesis", description = "Deletes specific hypothesis by it's id.")
+85 |     fun deleteById(
+86 |         @PathVariable hypothesisId: String,
+87 |     ): ResponseEntity<Void> =
+88 |         hypothesisService
+89 |             .deleteHypothesis(hypothesisId)
+90 |             .let {
+91 |                 ResponseEntity.noContent().build()
+92 |             }
+93 | }
+94 |
+────────────────────────────────────────────────────────────
+
+--- Related Files (automatically included based on imports) ---
+File: com/stackspot/discover/core/service/HypothesisService.kt (129 lines total)
+────────────────────────────────────────────────────────────
+...
+104 |     @Transactional
+105 |     fun deleteHypothesis(id: String) {
+106 |         val hypothesis = getHypothesisById(id)
+107 |         opportunityService.removeHypothesis(hypothesis.opportunity, hypothesis)
+108 |         log.info("Deleted hypothesis with id: {}", id)
+109 |         hypothesisEvent.sendEvent(
+110 |             hypothesis.toEventPayload(
+111 |                 action = EventAction.Delete,
+112 |                 userId = authUserContext.requireCurrentUser().userId
+113 |             )
+114 |         )
+115 |     }
+...
+────────────────────────────────────────────────────────────
+```
+
+**Your Response:**
+```
+I'll add the batch delete endpoint to the controller and implement the service method.
+
+FILE: com/stackspot/discover/core/controller/HypothesisController.kt
+<<<<<<< SEARCH
+    @DeleteMapping(HYPOTHESIS_ID)
+    @Operation(summary = "Delete specific Hypothesis", description = "Deletes specific hypothesis by it's id.")
+    fun deleteById(
+        @PathVariable hypothesisId: String,
+    ): ResponseEntity<Void> =
+        hypothesisService
+            .deleteHypothesis(hypothesisId)
+            .let {
+                ResponseEntity.noContent().build()
+            }
+}
+=======
+    @DeleteMapping(HYPOTHESIS_ID)
+    @Operation(summary = "Delete specific Hypothesis", description = "Deletes specific hypothesis by it's id.")
+    fun deleteById(
+        @PathVariable hypothesisId: String,
+    ): ResponseEntity<Void> =
+        hypothesisService
+            .deleteHypothesis(hypothesisId)
+            .let {
+                ResponseEntity.noContent().build()
+            }
+
+    @DeleteMapping("/batch")
+    @Operation(summary = "Delete multiple Hypotheses", description = "Deletes multiple hypotheses by their ids in batch.")
+    fun deleteBatch(
+        @RequestBody hypothesisIds: List<String>,
+    ): ResponseEntity<Void> =
+        hypothesisService
+            .deleteHypothesesBatch(hypothesisIds)
+            .let {
+                ResponseEntity.noContent().build()
+            }
+}
+>>>>>>> REPLACE
+
+FILE: com/stackspot/discover/core/service/HypothesisService.kt
+<<<<<<< SEARCH
+    @Transactional
+    fun deleteHypothesis(id: String) {
+        val hypothesis = getHypothesisById(id)
+        opportunityService.removeHypothesis(hypothesis.opportunity, hypothesis)
+        log.info("Deleted hypothesis with id: {}", id)
+        hypothesisEvent.sendEvent(
+            hypothesis.toEventPayload(
+                action = EventAction.Delete,
+                userId = authUserContext.requireCurrentUser().userId
+            )
+        )
+    }
+=======
+    @Transactional
+    fun deleteHypothesis(id: String) {
+        val hypothesis = getHypothesisById(id)
+        opportunityService.removeHypothesis(hypothesis.opportunity, hypothesis)
+        log.info("Deleted hypothesis with id: {}", id)
+        hypothesisEvent.sendEvent(
+            hypothesis.toEventPayload(
+                action = EventAction.Delete,
+                userId = authUserContext.requireCurrentUser().userId
+            )
+        )
+    }
+
+    @Transactional
+    fun deleteHypothesesBatch(ids: List<String>) {
+        log.info("Starting batch deletion of {} hypotheses", ids.size)
+        val currentUser = authUserContext.requireCurrentUser()
+
+        ids.forEach { id ->
+            val hypothesis = getHypothesisById(id)
+            opportunityService.removeHypothesis(hypothesis.opportunity, hypothesis)
+            log.info("Deleted hypothesis with id: {} in batch operation", id)
+            hypothesisEvent.sendEvent(
+                hypothesis.toEventPayload(
+                    action = EventAction.Delete,
+                    userId = currentUser.userId
+                )
+            )
+        }
+
+        log.info("Completed batch deletion of {} hypotheses", ids.size)
+    }
+>>>>>>> REPLACE
+```
+
+**Key Points for Multi-File Modifications:**
+- When you receive multiple files in the input (indicated by "Related Files" section), you can modify any of them
+- Use `FILE: <path>` marker before each SEARCH/REPLACE block to specify which file to modify
+- The file path must match EXACTLY as shown in the "File: <path>" headers from the input
+- You can have multiple SEARCH/REPLACE blocks for the same file - just repeat the FILE: marker before each block
+- Related files are included because they are dependencies - feel free to modify them when the changes are related
+
+### Example 6: Complex Modification with Context
 
 **Input:**
 ```
@@ -274,6 +416,7 @@ def divide(a: float, b: float) -> float:
 - ✅ Copy the EXACT text from the file (including whitespace) in SEARCH section
 - ✅ Include enough context lines to make SEARCH unique
 - ✅ Use multiple blocks for multiple changes
+- ✅ **Use FILE: markers when modifying multiple files (see Example 5)**
 - ✅ Test that your SEARCH text would match only ONE location in the file
 - ✅ Explain what you're doing before showing the SEARCH/REPLACE block
 - ✅ Preserve indentation and formatting in both SEARCH and REPLACE
