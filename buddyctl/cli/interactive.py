@@ -162,7 +162,6 @@ class InteractiveShell:
             "agent-default": self._cmd_agent_default,
             "clear": self._cmd_clear,
             "provider": self._cmd_provider,
-            "judge-agent": self._cmd_judge_agent,
         }
 
     def _get_prompt_text(self) -> str:
@@ -217,7 +216,6 @@ class InteractiveShell:
             "status": "Show current authentication and agent status",
             "agent-default": "Set the default agent ID",
             "provider": "List or change LLM provider",
-            "judge-agent": "Set the Judge Agent ID for StackSpot",
             "clear": "Clear the screen",
         }
 
@@ -396,50 +394,6 @@ class InteractiveShell:
         else:
             # Error
             print_formatted_text(HTML(f"<ansired>✗ Error: {message}</ansired>"))
-
-    def _cmd_judge_agent(self, args: List[str]) -> None:
-        """Set Judge Agent ID for StackSpot."""
-        if not args:
-            # Show current status
-            judge_agent_id = self.config.get_judge_agent_id()
-            if judge_agent_id:
-                print_formatted_text(
-                    HTML(f"<ansigreen>✓ Judge Agent ID: {judge_agent_id}</ansigreen>")
-                )
-            else:
-                print_formatted_text(HTML("<ansiyellow>Judge Agent ID not configured</ansiyellow>"))
-
-            print()
-            print_formatted_text(HTML("<ansicyan>Usage:</ansicyan>"))
-            print_formatted_text(HTML("  /judge-agent &lt;agent_id&gt;  - Set Judge Agent ID"))
-            print_formatted_text(HTML("  /judge-agent clear           - Remove Judge Agent ID"))
-            print()
-            print_formatted_text(
-                HTML(
-                    "<ansiyellow>💡 Judge Agent enables advanced tool calling for StackSpot</ansiyellow>"
-                )
-            )
-            return
-
-        if args[0].lower() == "clear":
-            self.config.remove_judge_agent_id()
-            print_formatted_text(HTML("<ansigreen>✓ Judge Agent ID removed</ansigreen>"))
-            return
-
-        judge_agent_id = args[0]
-
-        try:
-            self.config.set_judge_agent_id(judge_agent_id)
-            print_formatted_text(
-                HTML(f"<ansigreen>✓ Judge Agent ID set to: {judge_agent_id}</ansigreen>")
-            )
-            print_formatted_text(
-                HTML(
-                    "<ansiyellow>💡 Judge Agent will be used transparently when using StackSpot</ansiyellow>"
-                )
-            )
-        except ConfigurationError as e:
-            print_formatted_text(HTML(f"<ansired>Error: {e}</ansired>"))
 
     def _execute_command(self, command: str, args: List[str]) -> None:
         """Execute a parsed command."""

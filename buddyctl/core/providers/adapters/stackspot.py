@@ -256,41 +256,19 @@ class StackSpotAdapter:
         self.logger.info(f"Using StackSpotChain (SEARCH/REPLACE mode) with agent: {main_agent_id}")
         return self._create_stackspot_chain(
             main_agent_id=main_agent_id,
-            judge_agent_id=None,  # Not used anymore
             tools=tools
         )
 
-    def _get_judge_agent_id(self) -> Optional[str]:
-        """
-        Get Judge Agent ID from config or environment.
-
-        Priority:
-        1. config.json: judge_agent_id
-        2. Environment: STACKSPOT_JUDGE_AGENT_ID
-
-        Returns:
-            Judge Agent ID or None if not configured
-        """
-        # Check config first
-        judge_id = self.config.get_judge_agent_id()
-
-        if judge_id:
-            return judge_id
-
-        # Fallback to environment
-        return os.getenv("STACKSPOT_JUDGE_AGENT_ID")
 
     def _create_stackspot_chain(
         self,
         main_agent_id: str,
-        judge_agent_id: str,
         tools: List[BaseTool]
     ) -> "StackSpotChain":
         """Create StackSpot Chain (SEARCH/REPLACE pattern - single stage)."""
         from ....integrations.langchain.chains.stackspot_chain import StackSpotChain
 
-        # Note: judge_agent_id parameter kept for compatibility but not used
-        # StackSpotChain now uses single-stage SEARCH/REPLACE pattern
+        # StackSpotChain uses single-stage SEARCH/REPLACE pattern
         return StackSpotChain(
             main_agent_id=main_agent_id,
             tools=tools,

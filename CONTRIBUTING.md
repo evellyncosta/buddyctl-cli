@@ -97,7 +97,7 @@ buddyctl-cli/
 │   │       ├── context_formatter.py  # Context formatting
 │   │       ├── chains/          # Chain implementations
 │   │       │   ├── base.py          # Base chain
-│   │       │   ├── stackspot_chain.py  # Judge Agent pattern
+│   │       │   ├── stackspot_chain.py  # SEARCH/REPLACE pattern
 │   │       │   └── legacy.py        # Legacy chains
 │   │       └── examples/        # Usage examples
 │   ├── ui/                  # User interface
@@ -110,8 +110,7 @@ buddyctl-cli/
 │       └── file_autocomplete.py # File autocomplete
 ├── prompts/                 # Agent prompts
 │   ├── README.md            # Prompts documentation
-│   ├── main_agent.md        # Main Agent system prompt
-│   └── judge_agent.md       # Judge Agent system prompt
+│   └── main_agent.md        # Main Agent system prompt (SEARCH/REPLACE)
 ├── tests/                   # Test suite
 ├── pyproject.toml           # Poetry configuration
 ├── poetry.lock              # Lock file (version pinning)

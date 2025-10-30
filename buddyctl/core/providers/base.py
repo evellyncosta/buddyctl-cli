@@ -140,7 +140,7 @@ class ProviderAdapter(Protocol):
         Retorna modelo/executor com tools configurados.
 
         IMPORTANTE: Tool calling é SEMPRE ativo e transparente.
-        Provider decide internamente qual estratégia usar (Judge, Chain, Native).
+        Provider decide internamente qual estratégia usar (SEARCH/REPLACE, Chain, Native).
 
         Args:
             tools: Lista de tools disponíveis

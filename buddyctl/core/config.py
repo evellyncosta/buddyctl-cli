@@ -87,42 +87,6 @@ class BuddyConfig:
 
         self._save_config(config)
 
-    def get_judge_agent_id(self) -> Optional[str]:
-        """
-        Get the configured Judge Agent ID for StackSpot.
-
-        Returns:
-            Judge Agent ID or None if not configured
-        """
-        config = self._load_config()
-        return config.get("judge_agent_id")
-
-    def set_judge_agent_id(self, judge_agent_id: str) -> None:
-        """
-        Set the Judge Agent ID for StackSpot two-stage pattern.
-
-        Args:
-            judge_agent_id: StackSpot Judge Agent ID
-
-        Raises:
-            ConfigurationError: If agent ID is empty
-        """
-        if not judge_agent_id or not judge_agent_id.strip():
-            raise ConfigurationError("Judge Agent ID cannot be empty")
-
-        config = self._load_config()
-        config["judge_agent_id"] = judge_agent_id.strip()
-        config["updated_at"] = datetime.now(timezone.utc).isoformat()
-
-        self._save_config(config)
-
-    def remove_judge_agent_id(self) -> None:
-        """Remove the Judge Agent ID configuration."""
-        config = self._load_config()
-        config.pop("judge_agent_id", None)
-        config["updated_at"] = datetime.now(timezone.utc).isoformat()
-
-        self._save_config(config)
 
     def get_current_provider(self) -> str:
         """Get the current LLM provider. Defaults to 'stackspot'."""
@@ -218,8 +182,9 @@ class BuddyConfig:
         Strategies:
         - "auto" (default): Choose automatically per provider
         - "native": Force native tool calling (OpenAI/Anthropic only)
-        - "judge": Force Judge Agent (two-stage pattern)
         - "react": Force ReAct Agent (Feature 14-15)
+
+        Note: StackSpot always uses SEARCH/REPLACE pattern (single-stage).
 
         Returns:
             Strategy name, defaults to "auto"
@@ -232,12 +197,12 @@ class BuddyConfig:
         Set the tool calling strategy.
 
         Args:
-            strategy: One of "auto", "native", "judge", "react"
+            strategy: One of "auto", "native", "react"
 
         Raises:
             ConfigurationError: If strategy is invalid
         """
-        valid_strategies = ["auto", "native", "judge", "react"]
+        valid_strategies = ["auto", "native", "react"]
         strategy = strategy.strip().lower()
 
         if strategy not in valid_strategies:
