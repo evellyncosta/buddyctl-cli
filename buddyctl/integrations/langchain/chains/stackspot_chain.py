@@ -410,7 +410,61 @@ class StackSpotChain(BaseChain):
         for i, block in enumerate(blocks, 1):
             self.logger.debug(f"  Block {i}: {block}")
 
+        # Validate block format (check for malformed blocks with multiple separators)
+        self._validate_block_format(blocks, response)
+
         return blocks
+
+    def _validate_block_format(self, blocks: List[SearchReplaceBlock], response: str) -> None:
+        """
+        Validate that SEARCH/REPLACE blocks are well-formed.
+
+        Checks for common formatting errors like multiple `=======` markers in a single block.
+
+        Args:
+            blocks: Extracted blocks
+            response: Original response text
+
+        Raises:
+            ValueError: If malformed blocks are detected
+        """
+        # Pattern to find all potential blocks (including malformed ones)
+        # This captures the entire block from <<<<<<< SEARCH to >>>>>>> REPLACE
+        full_block_pattern = r'<<<<<<< SEARCH\n(.*?)\n>>>>>>> REPLACE'
+        full_blocks = re.findall(full_block_pattern, response, re.DOTALL)
+
+        for i, full_block_content in enumerate(full_blocks, 1):
+            # Count the number of `=======` separators in this block
+            separator_count = full_block_content.count('\n=======\n')
+
+            if separator_count == 0:
+                # No separator found - malformed block
+                error_msg = (
+                    f"Block {i}: Malformed SEARCH/REPLACE block - missing `=======` separator.\n"
+                    f"Each block must have EXACTLY ONE `=======` marker separating SEARCH from REPLACE.\n"
+                    f"Block preview: {full_block_content[:100]}..."
+                )
+                self.logger.error(error_msg)
+                raise ValueError(error_msg)
+            elif separator_count > 1:
+                # Multiple separators found - malformed block
+                error_msg = (
+                    f"Block {i}: Malformed SEARCH/REPLACE block - contains {separator_count} `=======` markers.\n"
+                    f"Each block must have EXACTLY ONE `=======` marker separating SEARCH from REPLACE.\n"
+                    f"The `=======` is a SEPARATOR, not part of your code!\n"
+                    f"\nCorrect format:\n"
+                    f"<<<<<<< SEARCH\n"
+                    f"old code\n"
+                    f"=======\n"
+                    f"new code\n"
+                    f">>>>>>> REPLACE\n"
+                    f"\nBlock preview: {full_block_content[:200]}..."
+                )
+                self.logger.error(error_msg)
+                raise ValueError(error_msg)
+            # If separator_count == 1, the block is correctly formatted
+
+        self.logger.debug(f"All {len(full_blocks)} block(s) have correct format (single separator)")
 
     def _extract_single_file_blocks(self, response: str) -> List[SearchReplaceBlock]:
         """
@@ -1120,8 +1174,64 @@ class StackSpotChain(BaseChain):
         self.logger.info(f"Starting correction round {round_number}")
         self.logger.debug(f"Validation error: {validation_error}")
 
+        # Check if error is about multiple separators (common mistake)
+        is_multiple_separator_error = "contains" in validation_error and "`=======` markers" in validation_error
+
         # Build correction prompt
-        correction_prompt = f"""ROUND {round_number} - SEARCH/REPLACE CORRECTION REQUIRED
+        if is_multiple_separator_error:
+            # Special message for multiple separator error
+            correction_prompt = f"""ROUND {round_number} - SEARCH/REPLACE CORRECTION REQUIRED
+
+Your previous SEARCH/REPLACE blocks failed validation with the following error:
+
+ERROR:
+{validation_error}
+
+**CRITICAL ERROR**: You used MULTIPLE `=======` markers in a single block!
+
+The `=======` marker is a SEPARATOR, NOT part of your code. You must use EXACTLY ONE per block.
+
+❌ WRONG (multiple separators):
+<<<<<<< SEARCH
+old code
+=======
+new code part 1
+=======
+new code part 2
+>>>>>>> REPLACE
+
+✅ CORRECT (single separator):
+<<<<<<< SEARCH
+old code
+=======
+new code part 1
+new code part 2
+>>>>>>> REPLACE
+
+Original user request:
+{original_request}
+
+Your previous attempt (REJECTED):
+{previous_response}
+
+Current file content with line numbers:
+{file_context}
+
+Please generate CORRECTED SEARCH/REPLACE blocks:
+
+CRITICAL INSTRUCTIONS:
+1. Use EXACTLY ONE `=======` marker per block (NOT zero, NOT two or more)
+2. The `=======` separates SEARCH from REPLACE - it is NOT part of the code
+3. Copy the SEARCH content EXACTLY from the file above
+   - Include ALL whitespace exactly as shown (tabs, spaces, newlines)
+   - The text after line numbers (after " | ") is the ACTUAL file content
+4. Include enough context to make SEARCH unique (typically 5-10 lines)
+
+REMEMBER: ONE `=======` per block. The SEARCH block must match the file EXACTLY.
+"""
+        else:
+            # Standard correction prompt
+            correction_prompt = f"""ROUND {round_number} - SEARCH/REPLACE CORRECTION REQUIRED
 
 Your previous SEARCH/REPLACE blocks failed validation with the following error:
 
@@ -1132,6 +1242,7 @@ This means the SEARCH content doesn't match the actual file. Common causes:
 1. **Whitespace mismatch**: Tabs vs spaces, trailing spaces, line breaks
 2. **Incomplete context**: SEARCH block doesn't include enough surrounding code
 3. **Text doesn't exist**: Content may have been misread from line numbers
+4. **Multiple `=======` markers**: Using more than one separator per block
 
 Original user request:
 {original_request}
@@ -1154,7 +1265,7 @@ CRITICAL INSTRUCTIONS:
    - Typically 5-10 lines
    - Include surrounding functions/code to ensure uniqueness
 
-3. Use the correct format:
+3. Use the correct format with EXACTLY ONE `=======` marker:
    <<<<<<< SEARCH
    exact text from file
    =======
@@ -1162,6 +1273,7 @@ CRITICAL INSTRUCTIONS:
    >>>>>>> REPLACE
 
 REMEMBER: The SEARCH block must match the file EXACTLY, character-by-character, including all whitespace.
+Use EXACTLY ONE `=======` separator per block.
 """
 
         # Call Main Agent with correction prompt

@@ -47,12 +47,19 @@ new code to replace with
    - Must maintain proper indentation for the context
    - Can be empty (for deletions)
 
-3. **Multiple modifications**:
+3. **CRITICAL - Single Separator Rule**:
+   - **Use EXACTLY ONE `=======` marker per block**
+   - The `=======` marker separates SEARCH from REPLACE
+   - **NEVER include `=======` inside the SEARCH or REPLACE content**
+   - **NEVER duplicate the `=======` marker within a block**
+   - The pattern is: `<<<<<<< SEARCH` → content → **ONE** `=======` → content → `>>>>>>> REPLACE`
+
+4. **Multiple modifications**:
    - Use multiple SEARCH/REPLACE blocks if modifying different parts of the file
    - Order blocks from top to bottom of the file
    - Each block should be independent
 
-4. **Uniqueness**:
+5. **Uniqueness**:
    - SEARCH content must be unique within the file
    - If the same code appears multiple times, include more context to make it unique
 
@@ -363,10 +370,28 @@ FILE: com/stackspot/discover/core/service/HypothesisService.kt
 
 **Key Points for Multi-File Modifications:**
 - When you receive multiple files in the input (indicated by "Related Files" section), you can modify any of them
-- Use `FILE: <path>` marker before each SEARCH/REPLACE block to specify which file to modify
+- **CRITICAL**: Use `FILE: <path>` marker before **EVERY** SEARCH/REPLACE block when modifying multiple files
 - The file path must match EXACTLY as shown in the "File: <path>" headers from the input
-- You can have multiple SEARCH/REPLACE blocks for the same file - just repeat the FILE: marker before each block
+- **If modifying the SAME file multiple times, REPEAT the `FILE:` marker before each block**
 - Related files are included because they are dependencies - feel free to modify them when the changes are related
+- **DO NOT mix blocks with and without `FILE:` markers** - either use `FILE:` for ALL blocks or for NONE
+
+**Example: Multiple modifications to the same file**
+```
+FILE: path/to/controller.kt
+<<<<<<< SEARCH
+first modification
+=======
+new code
+>>>>>>> REPLACE
+
+FILE: path/to/controller.kt  ← REPEAT the FILE: marker
+<<<<<<< SEARCH
+second modification
+=======
+new code
+>>>>>>> REPLACE
+```
 
 ### Example 6: Creating New Files
 
@@ -548,7 +573,8 @@ def divide(a: float, b: float) -> float:
 - ✅ Copy the EXACT text from the file (including whitespace) in SEARCH section
 - ✅ Include enough context lines to make SEARCH unique
 - ✅ Use multiple blocks for multiple changes
-- ✅ **Use FILE: markers when modifying multiple files (see Example 5)**
+- ✅ **Use `FILE:` marker before EVERY block when modifying multiple files (see Example 5)**
+- ✅ **When modifying the same file multiple times, REPEAT the `FILE:` marker before each block**
 - ✅ You can create AND modify files in the same response (see Example 7)
 - ✅ Test that your SEARCH text would match only ONE location in the file
 - ✅ Explain what you're doing before showing the blocks
@@ -563,6 +589,8 @@ def divide(a: float, b: float) -> float:
 - ❌ Include partial lines that might match elsewhere
 - ❌ Forget to include the block delimiters (<<<<<<< SEARCH, =======, >>>>>>> REPLACE)
 - ❌ Mix diff format with SEARCH/REPLACE format
+- ❌ **Omit `FILE:` markers when in multi-file mode - if you use `FILE:` for one block, use it for ALL blocks**
+- ❌ **Mix blocks with and without `FILE:` markers in the same response**
 
 ## Response Structure
 
@@ -632,7 +660,8 @@ Before providing your SEARCH/REPLACE blocks, mentally verify:
 3. ✅ Have I included enough context (typically 3-10 lines)?
 4. ✅ Does my REPLACE maintain proper indentation?
 5. ✅ Are the block delimiters correct?
-6. ✅ Did I avoid using diff format?
+6. ✅ Did I use EXACTLY ONE `=======` marker per block? (NOT two, NOT zero)
+7. ✅ Did I avoid using diff format?
 
 ## Common Mistakes to Avoid
 
@@ -654,7 +683,30 @@ new line
 >>>>>>> REPLACE
 ```
 
-❌ **Mistake 2**: Not matching exactly
+❌ **Mistake 2**: Using multiple `=======` markers in one block
+```
+<<<<<<< SEARCH
+old code
+=======
+new code part 1
+=======
+new code part 2
+>>>>>>> REPLACE
+```
+**Why this is wrong**: The block has TWO `=======` markers, making it impossible to parse correctly.
+
+✅ **Correct**: Single `=======` marker
+```
+<<<<<<< SEARCH
+old code
+=======
+new code part 1
+new code part 2
+>>>>>>> REPLACE
+```
+**Remember**: The `=======` is a SEPARATOR between SEARCH and REPLACE, NOT part of your code!
+
+❌ **Mistake 3**: Not matching exactly
 ```
 <<<<<<< SEARCH
 def add(a,b):  # Different spacing
@@ -668,7 +720,7 @@ def add(a, b):  # Matches original
 =======
 ```
 
-❌ **Mistake 3**: Insufficient context
+❌ **Mistake 4**: Insufficient context
 ```
 <<<<<<< SEARCH
     return x
@@ -685,6 +737,40 @@ def calculate(x: int) -> int:
 =======
 ```
 
+❌ **Mistake 5**: Missing `FILE:` marker in multi-file mode
+```
+FILE: service.kt
+<<<<<<< SEARCH
+service code
+=======
+new service code
+>>>>>>> REPLACE
+
+<<<<<<< SEARCH          ← WRONG: Missing FILE: marker for controller
+controller code
+=======
+new controller code
+>>>>>>> REPLACE
+```
+**Why this is wrong**: When you use `FILE:` for one block, you MUST use it for ALL blocks. The second block will be ignored!
+
+✅ **Correct**: Include `FILE:` for ALL blocks
+```
+FILE: service.kt
+<<<<<<< SEARCH
+service code
+=======
+new service code
+>>>>>>> REPLACE
+
+FILE: controller.kt    ← CORRECT: Include FILE: marker
+<<<<<<< SEARCH
+controller code
+=======
+new controller code
+>>>>>>> REPLACE
+```
+
 ## Performance Considerations
 
 - Include just enough context to be unique (don't include entire file)
@@ -694,4 +780,4 @@ def calculate(x: int) -> int:
 
 ## Summary
 
-**Remember**: Your PRIMARY output format is **SEARCH/REPLACE blocks**. The Judge Agent will extract and validate these blocks before applying them to the actual file. Make sure every SEARCH section matches the file content EXACTLY.
+**Remember**: Your PRIMARY output format is **SEARCH/REPLACE blocks**. Make sure every SEARCH section matches the file content EXACTLY.
