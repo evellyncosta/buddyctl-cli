@@ -101,6 +101,9 @@ buddyctl --help
 - 🛠️ **Single-stage SEARCH/REPLACE pattern** with local validation
 - 🔄 Automatic validation and retry logic (up to 3 attempts)
 - 📝 Code modification with SEARCH/REPLACE blocks (50% faster than previous approach)
+- 🧠 **Automatic dependency analysis** - detects related files (imports) and includes them automatically
+- 🔗 **Multi-file modifications** - modifies multiple related files in a single request (Controller, Service, Repository)
+- 🔍 **Transitive dependency detection** - analyzes dependencies up to 2 levels deep
 - 📁 File autocompletion with @ navigation
 - 🔍 Real-time file indexing and suggestions
 - 📋 Command history and auto-suggestions
@@ -133,6 +136,11 @@ Can you review @src/main.py and suggest improvements?
 
 # Request code modifications (automatically applied)
 Add type hints to @calculator.py
+
+# Multi-file modifications (automatic dependency detection)
+Add a batch delete endpoint to @HypothesisController.kt
+# System automatically detects HypothesisService.kt and HypothesisRepository.kt
+# and modifies all related files in a single operation
 ```
 
 ## Using as a Library
@@ -170,6 +178,33 @@ print(result["output"])           # Final response
 print(result["tool_calls_made"])  # Tools that were executed
 print(result["blocks_applied"])   # Number of SEARCH/REPLACE blocks applied
 print(result["validation_rounds"]) # Number of validation rounds (0 = success first try)
+
+# Multi-file modifications with automatic dependency detection
+from pathlib import Path
+
+# Format file with line numbers (required for SEARCH/REPLACE)
+def format_file(file_path: Path) -> str:
+    with open(file_path) as f:
+        lines = f.readlines()
+    return "\\n".join(f"{i:3} | {line.rstrip()}" for i, line in enumerate(lines, 1))
+
+# Prepare input with main file
+user_input = f"""Add a batch delete endpoint
+
+File: UserController.kt (94 lines total)
+────────────────────────────────────────────────────────────
+{format_file(Path("UserController.kt"))}
+────────────────────────────────────────────────────────────"""
+
+# Enrich with dependencies (automatic)
+project_root = Path.cwd()
+enriched_input = chain.enrich_with_dependencies(user_input, project_root)
+# System automatically detects UserService.kt and UserRepository.kt
+# and adds them to context
+
+# Execute with enriched context
+result = chain.invoke(enriched_input)
+# Modifications applied to Controller, Service, AND Repository automatically!
 ```
 
 ## Troubleshooting
