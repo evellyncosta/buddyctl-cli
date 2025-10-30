@@ -368,7 +368,138 @@ FILE: com/stackspot/discover/core/service/HypothesisService.kt
 - You can have multiple SEARCH/REPLACE blocks for the same file - just repeat the FILE: marker before each block
 - Related files are included because they are dependencies - feel free to modify them when the changes are related
 
-### Example 6: Complex Modification with Context
+### Example 6: Creating New Files
+
+**Input:**
+```
+User Request: Create a new utility file for string operations with capitalize and truncate functions
+```
+
+**Your Response:**
+```
+I'll create a new utility file with common string operations:
+
+NEW_FILE: src/utils/string_helpers.py
+```python
+"""String utility functions."""
+
+def capitalize_words(text: str) -> str:
+    """Capitalize first letter of each word.
+
+    Args:
+        text: Input string
+
+    Returns:
+        String with each word capitalized
+
+    Example:
+        >>> capitalize_words("hello world")
+        "Hello World"
+    """
+    return ' '.join(word.capitalize() for word in text.split())
+
+
+def truncate(text: str, max_length: int) -> str:
+    """Truncate text to max length with ellipsis.
+
+    Args:
+        text: Input string
+        max_length: Maximum length including ellipsis
+
+    Returns:
+        Truncated string with "..." if too long
+
+    Example:
+        >>> truncate("Hello World", 8)
+        "Hello..."
+    """
+    if len(text) <= max_length:
+        return text
+    return text[:max_length-3] + "..."
+```
+```
+
+**Key Points for Creating Files:**
+- Use `NEW_FILE: path/to/file.ext` marker to create new files
+- Wrap content in code block with language identifier (e.g., ```python)
+- Path is relative to project root
+- Include proper imports, docstrings, type hints, and structure
+- **Do NOT use SEARCH/REPLACE for new files** - only for modifying existing files
+
+### Example 7: Creating and Modifying Files Together
+
+**Input:**
+```
+User Request: Create a new config loader and update main.py to use it
+
+File: main.py (10 lines total)
+────────────────────────────────────────────────────────────
+ 1 | def main():
+ 2 |     print("Starting application")
+ 3 |     # TODO: Load configuration
+ 4 |     process()
+ 5 |
+ 6 | if __name__ == "__main__":
+ 7 |     main()
+────────────────────────────────────────────────────────────
+```
+
+**Your Response:**
+```
+I'll create a new config loader and integrate it into main.py:
+
+NEW_FILE: src/config_loader.py
+```python
+"""Configuration loader module."""
+import json
+from pathlib import Path
+from typing import Dict, Any
+
+def load_config(config_path: str = "config.json") -> Dict[str, Any]:
+    """Load configuration from JSON file.
+
+    Args:
+        config_path: Path to config file
+
+    Returns:
+        Configuration dictionary
+
+    Raises:
+        FileNotFoundError: If config file doesn't exist
+        json.JSONDecodeError: If config file is invalid JSON
+    """
+    path = Path(config_path)
+    with open(path, 'r') as f:
+        return json.load(f)
+```
+
+Now I'll update main.py to use the config loader:
+
+FILE: main.py
+<<<<<<< SEARCH
+def main():
+    print("Starting application")
+    # TODO: Load configuration
+    process()
+=======
+from src.config_loader import load_config
+
+def main():
+    print("Starting application")
+    config = load_config()
+    print(f"Loaded config: {config}")
+    process()
+>>>>>>> REPLACE
+```
+
+**Key Points for Mixed Operations:**
+- You can create NEW files AND modify EXISTING files in the same response
+- Use `NEW_FILE:` for files that don't exist yet
+- Use `FILE:` + `SEARCH/REPLACE` for files that already exist
+- New files are created BEFORE modifications are applied
+- This allows you to create a file and immediately reference it in modifications
+
+### Example 8: Complex Modification with Context
 
 **Input:**
 ```
@@ -412,16 +543,20 @@ def divide(a: float, b: float) -> float:
 ## Important Guidelines
 
 ### DO:
-- ✅ Use SEARCH/REPLACE blocks for ALL code modifications
+- ✅ Use **NEW_FILE:** marker to create new files (wrap content in code blocks)
+- ✅ Use **SEARCH/REPLACE** blocks for ALL code modifications to existing files
 - ✅ Copy the EXACT text from the file (including whitespace) in SEARCH section
 - ✅ Include enough context lines to make SEARCH unique
 - ✅ Use multiple blocks for multiple changes
 - ✅ **Use FILE: markers when modifying multiple files (see Example 5)**
+- ✅ You can create AND modify files in the same response (see Example 7)
 - ✅ Test that your SEARCH text would match only ONE location in the file
-- ✅ Explain what you're doing before showing the SEARCH/REPLACE block
+- ✅ Explain what you're doing before showing the blocks
 - ✅ Preserve indentation and formatting in both SEARCH and REPLACE
 
 ### DON'T:
+- ❌ Use SEARCH/REPLACE to create new files (use NEW_FILE: instead)
+- ❌ Use NEW_FILE: to modify existing files (use SEARCH/REPLACE instead)
 - ❌ Use unified diff format (---, +++, @@, +, -)
 - ❌ Use line numbers in SEARCH/REPLACE blocks
 - ❌ Paraphrase or modify the text in SEARCH section
