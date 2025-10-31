@@ -8,6 +8,5 @@ Each provider has its own optimized chain implementation:
 """
 
 from .base import ChainProtocol, BaseChain
-from .legacy import create_coder_chain  # Backward compatibility
 
-__all__ = ["ChainProtocol", "BaseChain", "create_coder_chain"]
+__all__ = ["ChainProtocol", "BaseChain"]

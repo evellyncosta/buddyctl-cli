@@ -416,8 +416,8 @@ class InteractiveShell:
 
         try:
             # Get tools (sempre disponíveis - Feature 17)
-            from ..integrations.langchain.tools import read_file, apply_diff
-            tools = [read_file, apply_diff]
+            from ..integrations.langchain.tools import read_file
+            tools = [read_file]
 
             # Get provider adapter (Feature 17)
             current_provider = self.config.get_current_provider()

@@ -20,9 +20,7 @@ orchestration of StackSpot agents using LangChain chains, tools, and agents.
 Main Components:
     - StackSpotChatModel: LangChain-compatible wrapper for StackSpot agents
     - create_buddyctl_agent: ReAct Agent with automatic tool execution
-    - create_coder_chain: Chain that generates diffs and optionally applies them
     - read_file: Tool for reading source code files
-    - apply_diff: Tool for applying unified diffs to files
 
 Example (ReAct Agent - Recommended):
     ```python
@@ -42,41 +40,15 @@ Example (ReAct Agent - Recommended):
     result = agent.invoke({"input": "altere calculator.py para 3 números"})
     print(result["output"])
     ```
-
-Example (Chain):
-    ```python
-    from buddyctl.integrations.langchain import (
-        StackSpotChatModel,
-        create_coder_chain
-    )
-
-    # Create chain that generates and applies diffs
-    chain = create_coder_chain(
-        agent_id="your-agent-id",
-        auto_apply=True
-    )
-
-    # Execute chain
-    result = chain.invoke({
-        "file_path": "src/main.py",
-        "instruction": "Add email validation"
-    })
-
-    print(result["diff"])
-    print(result["apply_result"])
-    ```
 """
 
 from .chat_model import StackSpotChatModel
-from .chains import create_coder_chain
-from .tools import read_file, apply_diff, BASIC_TOOLS
+from .tools import read_file, BASIC_TOOLS
 from .agents import create_buddyctl_agent
 
 __all__ = [
     "StackSpotChatModel",
     "create_buddyctl_agent",
-    "create_coder_chain",
     "read_file",
-    "apply_diff",
     "BASIC_TOOLS",
 ]
