@@ -415,9 +415,9 @@ class InteractiveShell:
             return  # Error occurred during file processing
 
         try:
-            # Get tools (sempre disponíveis - Feature 17)
-            from ..integrations.langchain.tools import read_file
-            tools = [read_file]
+            # Get tools (sempre disponíveis - Feature 17 + Feature 30)
+            from ..integrations.langchain.tools import BASIC_TOOLS
+            tools = BASIC_TOOLS
 
             # Get provider adapter (Feature 17)
             current_provider = self.config.get_current_provider()

@@ -152,8 +152,8 @@ class ProviderAdapter(Protocol):
             ValueError: Se provider não está configurado corretamente
 
         Example:
-            >>> from buddyctl.integrations.langchain.tools import read_file
-            >>> tools = [read_file]
+            >>> from buddyctl.integrations.langchain.tools import BASIC_TOOLS
+            >>> tools = BASIC_TOOLS
             >>> executor = provider.get_model_with_tools(tools)
             >>> result = executor.invoke("Read calculator.py")
             >>> print(result["output"])

@@ -81,6 +81,9 @@ class StackSpotChain(BaseChain):
         # Store file indexer reference for NEW_FILE support
         self.file_indexer = file_indexer
 
+        # Store tools as dict for easy access (Feature 30: Tool Refactoring)
+        self.tools_dict = {tool.name: tool for tool in tools}
+
     def invoke(self, user_input: str) -> Dict[str, Any]:
         """
         Execute: Main Agent → Extract SEARCH/REPLACE → Validate → Apply (with retry)
@@ -122,10 +125,10 @@ class StackSpotChain(BaseChain):
 
             self.logger.debug(f"Main Agent response length: {len(main_response)}")
 
-            # 2. Extract BOTH types of blocks
-            self.logger.debug("Step 2: Extracting blocks")
-            search_replace_blocks = self._extract_search_replace_blocks(main_response)
-            new_file_blocks = self._extract_new_files(main_response)
+            # 2. Extract BOTH types of blocks (using tools - Feature 30)
+            self.logger.debug("Step 2: Extracting blocks using tools")
+            search_replace_blocks = self._extract_search_replace_blocks_via_tool(main_response)
+            new_file_blocks = self._extract_new_files_via_tool(main_response)
 
             self.logger.info(
                 f"Extracted {len(new_file_blocks)} NEW_FILE block(s) and "
@@ -367,242 +370,98 @@ class StackSpotChain(BaseChain):
             "blocks_applied": 0
         }
 
-    def _extract_search_replace_blocks(self, response: str) -> List[SearchReplaceBlock]:
+    def _extract_search_replace_blocks_via_tool(self, response: str) -> List[SearchReplaceBlock]:
         """
-        Extract SEARCH/REPLACE blocks from Main Agent response.
+        Extract SEARCH/REPLACE blocks using the new tool (Feature 30).
 
-        Supports two patterns:
+        Uses extract_search_replace_blocks tool and converts JSON result to
+        SearchReplaceBlock objects.
 
-        1. Single-file mode (legacy):
-            <<<<<<< SEARCH
-            exact text to find
-            =======
-            new text to replace
-            >>>>>>> REPLACE
-
-        2. Multi-file mode (with FILE: markers):
-            FILE: path/to/file1.py
-            <<<<<<< SEARCH
-            exact text to find
-            =======
-            new text to replace
-            >>>>>>> REPLACE
-
-            FILE: path/to/file2.py
-            <<<<<<< SEARCH
-            ...
-            >>>>>>> REPLACE
+        Args:
+            response: LLM response text
 
         Returns:
-            List of SearchReplaceBlock objects (with optional file_path attribute)
+            List of SearchReplaceBlock objects
         """
+        import json
+
+        # Use tool to extract blocks
+        tool = self.tools_dict["extract_search_replace_blocks"]
+        result = tool.invoke({"response": response})
+
+        # Check if error
+        if result.startswith("Error:"):
+            self.logger.error(f"Tool extraction failed: {result}")
+            raise ValueError(result)
+
+        # Parse JSON result
+        try:
+            blocks_data = json.loads(result)
+        except json.JSONDecodeError as e:
+            self.logger.error(f"Failed to parse tool result as JSON: {e}")
+            raise ValueError(f"Invalid JSON from tool: {result}")
+
+        # Convert to SearchReplaceBlock objects
         blocks = []
+        for block_dict in blocks_data:
+            blocks.append(SearchReplaceBlock(
+                search=block_dict["search"],
+                replace=block_dict["replace"],
+                file_path=block_dict.get("file_path")
+            ))
 
-        # Check if response contains FILE: markers (multi-file mode)
-        if 'FILE:' in response:
-            self.logger.debug("Detected multi-file mode (FILE: markers present)")
-            blocks = self._extract_multi_file_blocks(response)
-        else:
-            self.logger.debug("Detected single-file mode (no FILE: markers)")
-            blocks = self._extract_single_file_blocks(response)
-
-        self.logger.info(f"Extracted {len(blocks)} SEARCH/REPLACE block(s)")
+        self.logger.info(f"Extracted {len(blocks)} SEARCH/REPLACE block(s) via tool")
         for i, block in enumerate(blocks, 1):
             self.logger.debug(f"  Block {i}: {block}")
 
-        # Validate block format (check for malformed blocks with multiple separators)
-        self._validate_block_format(blocks, response)
-
         return blocks
 
-    def _validate_block_format(self, blocks: List[SearchReplaceBlock], response: str) -> None:
+    def _extract_new_files_via_tool(self, response: str) -> List[NewFileBlock]:
         """
-        Validate that SEARCH/REPLACE blocks are well-formed.
+        Extract NEW_FILE blocks using the new tool (Feature 30).
 
-        Checks for common formatting errors like multiple `=======` markers in a single block.
+        Uses extract_new_file_blocks tool and converts JSON result to
+        NewFileBlock objects.
 
         Args:
-            blocks: Extracted blocks
-            response: Original response text
-
-        Raises:
-            ValueError: If malformed blocks are detected
-        """
-        # Pattern to find all potential blocks (including malformed ones)
-        # This captures the entire block from <<<<<<< SEARCH to >>>>>>> REPLACE
-        full_block_pattern = r'<<<<<<< SEARCH\n(.*?)\n>>>>>>> REPLACE'
-        full_blocks = re.findall(full_block_pattern, response, re.DOTALL)
-
-        for i, full_block_content in enumerate(full_blocks, 1):
-            # Count the number of `=======` separators in this block
-            separator_count = full_block_content.count('\n=======\n')
-
-            if separator_count == 0:
-                # No separator found - malformed block
-                error_msg = (
-                    f"Block {i}: Malformed SEARCH/REPLACE block - missing `=======` separator.\n"
-                    f"Each block must have EXACTLY ONE `=======` marker separating SEARCH from REPLACE.\n"
-                    f"Block preview: {full_block_content[:100]}..."
-                )
-                self.logger.error(error_msg)
-                raise ValueError(error_msg)
-            elif separator_count > 1:
-                # Multiple separators found - malformed block
-                error_msg = (
-                    f"Block {i}: Malformed SEARCH/REPLACE block - contains {separator_count} `=======` markers.\n"
-                    f"Each block must have EXACTLY ONE `=======` marker separating SEARCH from REPLACE.\n"
-                    f"The `=======` is a SEPARATOR, not part of your code!\n"
-                    f"\nCorrect format:\n"
-                    f"<<<<<<< SEARCH\n"
-                    f"old code\n"
-                    f"=======\n"
-                    f"new code\n"
-                    f">>>>>>> REPLACE\n"
-                    f"\nBlock preview: {full_block_content[:200]}..."
-                )
-                self.logger.error(error_msg)
-                raise ValueError(error_msg)
-            # If separator_count == 1, the block is correctly formatted
-
-        self.logger.debug(f"All {len(full_blocks)} block(s) have correct format (single separator)")
-
-    def _extract_single_file_blocks(self, response: str) -> List[SearchReplaceBlock]:
-        """
-        Extract SEARCH/REPLACE blocks in single-file mode (no FILE: markers).
-
-        Returns:
-            List of SearchReplaceBlock objects (without file_path)
-        """
-        pattern = r'<<<<<<< SEARCH\n(.*?)\n=======\n(.*?)\n>>>>>>> REPLACE'
-        matches = re.findall(pattern, response, re.DOTALL)
-
-        blocks = []
-        for search_text, replace_text in matches:
-            blocks.append(SearchReplaceBlock(
-                search=search_text,
-                replace=replace_text,
-                file_path=None
-            ))
-
-        return blocks
-
-    def _extract_multi_file_blocks(self, response: str) -> List[SearchReplaceBlock]:
-        """
-        Extract SEARCH/REPLACE blocks in multi-file mode (with FILE: markers).
-
-        Pattern:
-            FILE: path/to/file.py
-            <<<<<<< SEARCH
-            ...
-            =======
-            ...
-            >>>>>>> REPLACE
-
-        Returns:
-            List of SearchReplaceBlock objects (with file_path attribute)
-        """
-        blocks = []
-
-        # Split response into sections by FILE: markers
-        # Pattern: FILE: <path> followed by SEARCH/REPLACE blocks
-        file_sections_pattern = r'FILE:\s*([^\n]+)\s*((?:<<<<<<< SEARCH.*?>>>>>>> REPLACE\s*)+)'
-        file_sections = re.findall(file_sections_pattern, response, re.DOTALL)
-
-        for file_path, blocks_text in file_sections:
-            file_path = file_path.strip()
-            self.logger.debug(f"Processing FILE: {file_path}")
-
-            # Extract SEARCH/REPLACE blocks within this file section
-            block_pattern = r'<<<<<<< SEARCH\n(.*?)\n=======\n(.*?)\n>>>>>>> REPLACE'
-            block_matches = re.findall(block_pattern, blocks_text, re.DOTALL)
-
-            for search_text, replace_text in block_matches:
-                blocks.append(SearchReplaceBlock(
-                    search=search_text,
-                    replace=replace_text,
-                    file_path=file_path
-                ))
-
-        return blocks
-
-    def _extract_new_files(self, response: str) -> List[NewFileBlock]:
-        """
-        Extract NEW_FILE blocks from Main Agent response.
-
-        Pattern:
-            NEW_FILE: path/to/file.py
-            ```python
-            content here
-            ```
+            response: LLM response text
 
         Returns:
             List of NewFileBlock objects
         """
+        import json
+
+        # Use tool to extract blocks
+        tool = self.tools_dict["extract_new_file_blocks"]
+        result = tool.invoke({"response": response})
+
+        # Check if error
+        if result.startswith("Error"):
+            self.logger.error(f"Tool extraction failed: {result}")
+            raise ValueError(result)
+
+        # Parse JSON result
+        try:
+            blocks_data = json.loads(result)
+        except json.JSONDecodeError as e:
+            self.logger.error(f"Failed to parse tool result as JSON: {e}")
+            raise ValueError(f"Invalid JSON from tool: {result}")
+
+        # Convert to NewFileBlock objects
         blocks = []
-
-        # Pattern: NEW_FILE: <path> followed by code block
-        pattern = r'NEW_FILE:\s*([^\n]+)\s*```(\w*)\n(.*?)```'
-        matches = re.findall(pattern, response, re.DOTALL)
-
-        for file_path, language, content in matches:
-            file_path = file_path.strip()
-            language = language.strip() if language else None
-
+        for block_dict in blocks_data:
             blocks.append(NewFileBlock(
-                file_path=file_path,
-                content=content,
-                language=language
+                file_path=block_dict["file_path"],
+                content=block_dict["content"],
+                language=block_dict.get("language")
             ))
 
-            self.logger.debug(f"Extracted NEW_FILE block: {file_path}")
+        self.logger.info(f"Extracted {len(blocks)} NEW_FILE block(s) via tool")
+        for block in blocks:
+            self.logger.debug(f"  {block}")
 
         return blocks
 
-    def _validate_search_replace_blocks(
-        self,
-        blocks: List[SearchReplaceBlock],
-        file_path: str
-    ) -> tuple[bool, str | None]:
-        """
-        [DEPRECATED] Legacy method for single-file validation.
-        Use _validate_multi_file_blocks() instead.
-
-        Validate that SEARCH blocks exist in target file (dry-run).
-
-        Returns:
-            (is_valid, error_message)
-
-        Example errors:
-            (False, "Block 1: SEARCH content not found. First line: 'def subtract...'")
-        """
-        try:
-            with open(file_path, 'r', encoding='utf-8') as f:
-                file_content = f.read()
-        except FileNotFoundError:
-            return (False, f"File not found: {file_path}")
-        except Exception as e:
-            return (False, f"Error reading file: {e}")
-
-        for i, block in enumerate(blocks, 1):
-            if block.search not in file_content:
-                # Better error message: show first line of SEARCH
-                lines = block.search.split('\n')
-                first_line = lines[0] if lines else ""
-
-                # Show snippet for debugging
-                snippet = first_line[:60] + "..." if len(first_line) > 60 else first_line
-
-                error_msg = (
-                    f"Block {i}/{len(blocks)}: SEARCH content not found in file.\n"
-                    f"First line of SEARCH block: '{snippet}'\n"
-                    f"Make sure text matches EXACTLY (including whitespace)."
-                )
-
-                self.logger.warning(error_msg)
-                return (False, error_msg)
-
-        self.logger.debug(f"All {len(blocks)} block(s) validated successfully")
-        return (True, None)
 
     def _validate_multi_file_blocks(
         self,
@@ -712,55 +571,6 @@ class StackSpotChain(BaseChain):
 
         self.logger.debug(f"All {len(blocks)} NEW_FILE block(s) validated successfully")
         return (True, None)
-
-    def _apply_search_replace_blocks(
-        self,
-        blocks: List[SearchReplaceBlock],
-        file_path: str
-    ) -> None:
-        """
-        [DEPRECATED] Legacy method for single-file application.
-        Use _apply_multi_file_blocks() instead.
-
-        Apply SEARCH/REPLACE blocks to file.
-
-        Replaces first occurrence of each SEARCH block with REPLACE content.
-
-        Args:
-            blocks: List of SearchReplaceBlock objects
-            file_path: Path to target file
-
-        Raises:
-            ValueError: If SEARCH content not found (should not happen after validation)
-        """
-        with open(file_path, 'r', encoding='utf-8') as f:
-            content = f.read()
-
-        original_length = len(content)
-
-        for i, block in enumerate(blocks, 1):
-            if block.search in content:
-                # Replace first occurrence only
-                content = content.replace(block.search, block.replace, 1)
-                self.logger.info(f"Applied block {i}/{len(blocks)}")
-            else:
-                # Should not happen (validation passed)
-                error_msg = (
-                    f"Block {i}: SEARCH content disappeared between validation and apply. "
-                    f"File may have been modified externally."
-                )
-                self.logger.error(error_msg)
-                raise ValueError(error_msg)
-
-        # Write back
-        with open(file_path, 'w', encoding='utf-8') as f:
-            f.write(content)
-
-        chars_changed = len(content) - original_length
-        self.logger.info(
-            f"Successfully applied {len(blocks)} change(s) to {file_path}. "
-            f"Changed {chars_changed:+d} characters."
-        )
 
     def _apply_multi_file_blocks(
         self,

@@ -43,12 +43,25 @@ Example (ReAct Agent - Recommended):
 """
 
 from .chat_model import StackSpotChatModel
-from .tools import read_file, BASIC_TOOLS
+from .tools import (
+    read_file,
+    extract_search_replace_blocks,
+    extract_new_file_blocks,
+    search_replace_in_file,
+    create_new_file,
+    BASIC_TOOLS
+)
 from .agents import create_buddyctl_agent
+from .executors import NativeToolExecutor
 
 __all__ = [
     "StackSpotChatModel",
     "create_buddyctl_agent",
     "read_file",
+    "extract_search_replace_blocks",
+    "extract_new_file_blocks",
+    "search_replace_in_file",
+    "create_new_file",
     "BASIC_TOOLS",
+    "NativeToolExecutor",
 ]

@@ -18,7 +18,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from buddyctl.core.config import BuddyConfig
 from buddyctl.core.providers.adapters.stackspot import StackSpotAdapter
-from buddyctl.integrations.langchain.tools import read_file
+from buddyctl.integrations.langchain.tools import BASIC_TOOLS
 
 # Setup logging
 logging.basicConfig(
@@ -46,7 +46,7 @@ def main():
 
     # 2. Get executor with tools
     logger.info("\n📋 Step 2: Creating StackSpotChain with tools")
-    tools = [read_file]
+    tools = BASIC_TOOLS
 
     try:
         executor = adapter.get_model_with_tools(tools)
