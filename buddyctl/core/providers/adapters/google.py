@@ -60,6 +60,7 @@ class GoogleAdapter:
         """
         self.config = config
         self._model = None
+        self.interactive_mode = False  # Feature 33: Dynamic prompts
         self.logger = logging.getLogger(__name__)
 
     @property
@@ -328,6 +329,19 @@ class GoogleAdapter:
         """
         return True
 
+    def set_interactive_mode(self, enabled: bool) -> None:
+        """
+        Set interactive mode for this adapter (Feature 33).
+
+        When enabled, uses code_agent_interactive.md prompt template.
+        When disabled, uses code_agent_auto.md prompt template.
+
+        Args:
+            enabled: True for interactive mode, False for auto-apply mode
+        """
+        self.interactive_mode = enabled
+        self.logger.debug(f"Interactive mode set to: {enabled}")
+
     def get_model_with_tools(self, tools: List[BaseTool]) -> ExecutorProtocol:
         """
         Get model with tools bound (native function calling + system prompt).
@@ -360,11 +374,20 @@ class GoogleAdapter:
         self.logger.info(f"Binding {len(tools)} tools to Gemini model")
         model_with_tools = model.bind_tools(tools)
 
+        # Select prompt based on interactive mode (Feature 33: Dynamic Prompts)
+        prompt_name = (
+            "code_agent_interactive" if self.interactive_mode
+            else "code_agent_auto"
+        )
+        self.logger.info(
+            f"Using prompt: {prompt_name} (interactive_mode={self.interactive_mode})"
+        )
+
         # Wrap in PromptedToolExecutor (adds system prompt from local templates)
         return PromptedToolExecutor(
             model=model_with_tools,
             tools=tools,
-            prompt_name="code_agent"  # Loads from prompts/templates/code_agent.md
+            prompt_name=prompt_name  # Dynamic prompt selection
         )
 
 
