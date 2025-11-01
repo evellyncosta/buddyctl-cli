@@ -41,6 +41,9 @@ class InteractiveShell:
         # Initialize default provider configuration
         self.config.initialize_default_providers()
 
+        # Load interactive mode setting from config
+        self.interactive_mode = self.config.get_default_mode() == "interactive"
+
         # Logging
         self.logger = logging.getLogger(__name__)
 
@@ -162,6 +165,7 @@ class InteractiveShell:
             "agent-default": self._cmd_agent_default,
             "clear": self._cmd_clear,
             "provider": self._cmd_provider,
+            "mode": self._cmd_mode,
         }
 
     def _get_prompt_text(self) -> str:
@@ -216,6 +220,7 @@ class InteractiveShell:
             "status": "Show current authentication and agent status",
             "agent-default": "Set the default agent ID",
             "provider": "List or change LLM provider",
+            "mode": "Switch between auto and interactive execution modes",
             "clear": "Clear the screen",
         }
 
@@ -395,6 +400,43 @@ class InteractiveShell:
             # Error
             print_formatted_text(HTML(f"<ansired>✗ Error: {message}</ansired>"))
 
+    def _cmd_mode(self, args: List[str]) -> None:
+        """Switch between auto and interactive execution modes."""
+        # If no arguments, show current mode
+        if not args:
+            current_mode = "interactive" if self.interactive_mode else "auto"
+            print_formatted_text(HTML(f"<b>Current execution mode:</b> {current_mode}"))
+            print()
+            print_formatted_text(HTML("<b>Available modes:</b>"))
+            print_formatted_text(
+                HTML("  • <ansiblue>auto</ansiblue> - Apply modifications automatically after validation")
+            )
+            print_formatted_text(
+                HTML("  • <ansiblue>interactive</ansiblue> - Show preview and ask for confirmation")
+            )
+            print()
+            print_formatted_text(HTML("Usage: <ansiblue>/mode &lt;auto|interactive&gt;</ansiblue>"))
+            return
+
+        # Set mode
+        mode = args[0].lower()
+
+        if mode == "auto":
+            self.interactive_mode = False
+            self.config.set_default_mode("auto")
+            print_formatted_text(
+                HTML("<ansigreen>✓ Execution mode set to: auto (modifications applied automatically)</ansigreen>")
+            )
+        elif mode == "interactive":
+            self.interactive_mode = True
+            self.config.set_default_mode("interactive")
+            print_formatted_text(
+                HTML("<ansigreen>✓ Execution mode set to: interactive (preview before applying)</ansigreen>")
+            )
+        else:
+            print_formatted_text(HTML(f"<ansired>✗ Error: Unknown mode '{mode}'</ansired>"))
+            print_formatted_text(HTML("Usage: <ansiblue>/mode &lt;auto|interactive&gt;</ansiblue>"))
+
     def _execute_command(self, command: str, args: List[str]) -> None:
         """Execute a parsed command."""
         if command not in self.commands:
@@ -426,6 +468,10 @@ class InteractiveShell:
             # Set file indexer for NEW_FILE support (Feature 29)
             if hasattr(provider_adapter, 'set_file_indexer'):
                 provider_adapter.set_file_indexer(self.file_indexer)
+
+            # Set interactive mode (Feature 34)
+            if hasattr(provider_adapter, 'set_interactive_mode'):
+                provider_adapter.set_interactive_mode(self.interactive_mode)
 
             # Get executor with tools (SEMPRE, transparente)
             # Provider adapter decide internamente se usa Judge Agent, ReAct, ou native tools

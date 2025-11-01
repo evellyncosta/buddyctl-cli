@@ -44,6 +44,7 @@ class StackSpotAdapter:
         self.auth = auth or StackSpotAuth()
         self._model: Optional[StackSpotChatModel] = None
         self.file_indexer = None  # Will be set by InteractiveShell
+        self.interactive_mode = False  # Feature 34: Interactive mode
         self.logger = logging.getLogger(__name__)
 
     def set_file_indexer(self, file_indexer) -> None:
@@ -54,6 +55,16 @@ class StackSpotAdapter:
             file_indexer: FileIndexer instance
         """
         self.file_indexer = file_indexer
+
+    def set_interactive_mode(self, enabled: bool) -> None:
+        """
+        Enable or disable interactive mode (Feature 34).
+
+        Args:
+            enabled: True to enable interactive preview/review, False for auto-apply
+        """
+        self.interactive_mode = enabled
+        self.logger.debug(f"Interactive mode: {enabled}")
 
     @property
     def name(self) -> str:
@@ -272,7 +283,8 @@ class StackSpotAdapter:
         return StackSpotChain(
             main_agent_id=main_agent_id,
             tools=tools,
-            file_indexer=self.file_indexer  # Pass file indexer for NEW_FILE support
+            file_indexer=self.file_indexer,  # Pass file indexer for NEW_FILE support
+            interactive_mode=self.interactive_mode  # Pass interactive mode (Feature 34)
         )
 
     def _create_react_executor(self, tools: List[BaseTool]) -> "AgentExecutor":

@@ -58,7 +58,8 @@ class StackSpotChain(BaseChain):
         self,
         main_agent_id: str,
         tools: List[BaseTool],
-        file_indexer: Any = None
+        file_indexer: Any = None,
+        interactive_mode: bool = False
     ):
         """
         Initialize StackSpot Chain with SEARCH/REPLACE pattern.
@@ -67,6 +68,7 @@ class StackSpotChain(BaseChain):
             main_agent_id: StackSpot agent ID for main agent
             tools: Available tools (kept for compatibility with base class)
             file_indexer: Optional FileIndexer instance for index updates
+            interactive_mode: If True, show preview and ask for confirmation before applying (Feature 34)
         """
         super().__init__(tools)
 
@@ -83,6 +85,22 @@ class StackSpotChain(BaseChain):
 
         # Store tools as dict for easy access (Feature 30: Tool Refactoring)
         self.tools_dict = {tool.name: tool for tool in tools}
+
+        # Interactive mode (Feature 34)
+        self.interactive_mode = interactive_mode
+        self.handler = None
+
+        if self.interactive_mode:
+            from ....cli.interactive_mode_handler import InteractiveModeHandler
+            from ....core.config import BuddyConfig
+
+            # Load interactive mode config
+            config = BuddyConfig()
+            interactive_config = config.get_interactive_mode_config()
+
+            # Create handler
+            self.handler = InteractiveModeHandler(config=interactive_config)
+            self.logger.info("Interactive mode enabled")
 
     def invoke(self, user_input: str) -> Dict[str, Any]:
         """
@@ -268,9 +286,77 @@ class StackSpotChain(BaseChain):
                 is_valid, validation_error = self._validate_multi_file_blocks(blocks)
 
             if is_valid:
-                # 5. Apply blocks
+                # 5. Interactive mode: review blocks before applying (Feature 34)
+                if self.interactive_mode and self.handler:
+                    self.logger.info("Interactive mode: reviewing blocks with user")
+
+                    # Convert blocks to ModificationBlock format for handler
+                    modification_blocks = self._convert_to_modification_blocks(blocks)
+
+                    # Show preview and collect decisions
+                    review_results = self.handler.review_blocks(
+                        modification_blocks,
+                        files_cache=files_content_cache
+                    )
+
+                    # Filter blocks based on user decisions
+                    from ....cli.interactive_mode_handler import BlockAction
+
+                    accepted_indices = [
+                        r.block_index for r in review_results
+                        if r.action == BlockAction.ACCEPT
+                    ]
+
+                    # Check if user quit
+                    if any(r.reason == "quit" for r in review_results):
+                        self.logger.info("User quit review process")
+                        MessageBox.warning(
+                            "Review cancelled",
+                            "No modifications were applied"
+                        )
+                        return {
+                            "output": main_response,
+                            "tool_calls_made": [],
+                            "validation_rounds": round_number - 1,
+                            "blocks_applied": 0
+                        }
+
+                    # Show summary
+                    self.handler.show_summary(review_results)
+
+                    # Confirm before applying
+                    if not self.handler.confirm_apply(len(accepted_indices)):
+                        self.logger.info("User declined to apply modifications")
+                        MessageBox.warning(
+                            "Application cancelled",
+                            "No modifications were applied"
+                        )
+                        return {
+                            "output": main_response,
+                            "tool_calls_made": [],
+                            "validation_rounds": round_number - 1,
+                            "blocks_applied": 0
+                        }
+
+                    # Filter to only accepted blocks
+                    blocks = [blocks[i] for i in accepted_indices]
+
+                    if not blocks:
+                        self.logger.info("No blocks accepted")
+                        MessageBox.info(
+                            "No modifications applied",
+                            "All blocks were rejected or skipped"
+                        )
+                        return {
+                            "output": main_response,
+                            "tool_calls_made": [],
+                            "validation_rounds": round_number - 1,
+                            "blocks_applied": 0
+                        }
+
+                # 6. Apply blocks
                 self.logger.info(f"✅ All {len(blocks)} block(s) validated successfully on round {round_number}")
-                self.logger.debug("Step 5: Applying blocks")
+                self.logger.debug("Step 6: Applying blocks")
 
                 try:
                     modified_files = self._apply_multi_file_blocks(blocks)
@@ -948,6 +1034,33 @@ class StackSpotChain(BaseChain):
         except Exception as e:
             self.logger.warning(f"Dependency analysis failed: {e}")
             return user_input
+
+    def _convert_to_modification_blocks(
+        self,
+        blocks: List[SearchReplaceBlock]
+    ) -> List["ModificationBlock"]:
+        """
+        Convert SearchReplaceBlock objects to ModificationBlock format for interactive handler.
+
+        Args:
+            blocks: List of SearchReplaceBlock objects
+
+        Returns:
+            List of ModificationBlock objects
+        """
+        from ....cli.interactive_mode_handler import ModificationBlock
+
+        modification_blocks = []
+
+        for block in blocks:
+            modification_blocks.append(ModificationBlock(
+                block_type="search_replace",
+                file_path=block.file_path or "unknown",
+                search=block.search,
+                replace=block.replace
+            ))
+
+        return modification_blocks
 
     def next_round(
         self,

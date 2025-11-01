@@ -15,38 +15,27 @@
 """Simple calculator module."""
 
 
-
-
-
-
-
-
-def multiply_two_numbers(a: float, b: float) -> float:
-    """Multiply two numbers.
+def add_two_numbers(a: float, b: float) -> float:
+    """Add two numbers.
 
     Args:
         a: First number
         b: Second number
 
     Returns:
-        Product of a and b
+        Sum of a and b
     """
-    return a * b
+    return a + b
 
 
-def divide_two_numbers(a: float, b: float) -> float:
-    """Divide two numbers.
+def subtract_two_numbers(a: float, b: float) -> float:
+    """Subtract two numbers.
 
     Args:
-        a: First number (dividend)
-        b: Second number (divisor)
+        a: First number (minuend)
+        b: Second number (subtrahend)
 
     Returns:
-        Quotient of a divided by b
-
-    Raises:
-        ValueError: If divisor is zero
+        Difference of a minus b
     """
-    if b == 0:
-        raise ValueError("Cannot divide by zero")
-    return a / b
+    return a - b

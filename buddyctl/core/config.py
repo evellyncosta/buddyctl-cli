@@ -216,6 +216,68 @@ class BuddyConfig:
         config["updated_at"] = datetime.now(timezone.utc).isoformat()
         self._save_config(config)
 
+    def get_default_mode(self) -> str:
+        """
+        Get the default execution mode.
+
+        Modes:
+        - "auto": Automatically apply modifications after validation (default)
+        - "interactive": Show preview and ask for confirmation before applying
+
+        Returns:
+            Mode name, defaults to "auto"
+        """
+        config = self._load_config()
+        return config.get("default_mode", "auto")
+
+    def set_default_mode(self, mode: str) -> None:
+        """
+        Set the default execution mode.
+
+        Args:
+            mode: One of "auto", "interactive"
+
+        Raises:
+            ConfigurationError: If mode is invalid
+        """
+        valid_modes = ["auto", "interactive"]
+        mode = mode.strip().lower()
+
+        if mode not in valid_modes:
+            raise ConfigurationError(
+                f"Invalid mode '{mode}'. "
+                f"Must be one of: {', '.join(valid_modes)}"
+            )
+
+        config = self._load_config()
+        config["default_mode"] = mode
+        config["updated_at"] = datetime.now(timezone.utc).isoformat()
+
+        self._save_config(config)
+
+    def get_interactive_mode_config(self) -> Dict[str, Any]:
+        """
+        Get interactive mode display configuration.
+
+        Returns:
+            Dict with display settings:
+            - show_diffs: bool
+            - show_line_numbers: bool
+            - color_diff: bool
+            - context_lines: int
+        """
+        config = self._load_config()
+        modes_config = config.get("modes", {})
+        interactive_config = modes_config.get("interactive", {})
+
+        # Return defaults if not configured
+        return {
+            "show_diffs": interactive_config.get("show_diffs", True),
+            "show_line_numbers": interactive_config.get("show_line_numbers", True),
+            "color_diff": interactive_config.get("color_diff", True),
+            "context_lines": interactive_config.get("context_lines", 3)
+        }
+
     def get_config_status(self) -> Dict[str, Any]:
         """Get current configuration status for display."""
         config = self._load_config()
@@ -225,6 +287,7 @@ class BuddyConfig:
         current_provider = self.get_current_provider()
         agent_mode = self.get_agent_mode()
         strategy = self.get_tool_calling_strategy()
+        default_mode = self.get_default_mode()
 
         return {
             "has_default_agent": bool(agent_id),
@@ -232,5 +295,6 @@ class BuddyConfig:
             "current_provider": current_provider,
             "agent_mode": agent_mode,
             "tool_calling_strategy": strategy,
+            "default_mode": default_mode,
             "updated_at": updated_at,
         }
