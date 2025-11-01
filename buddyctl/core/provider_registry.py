@@ -55,8 +55,8 @@ class ProviderRegistry:
         "google": ProviderInfo(
             name="google",
             display_name="Google Gemini",
-            implemented=False,
-            enabled=False,
+            implemented=True,
+            enabled=True,
             requires_credentials=["GOOGLE_API_KEY"],
             description="Google's Gemini model"
         ),

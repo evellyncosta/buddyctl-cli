@@ -146,9 +146,9 @@ class BuddyConfig:
                         "requires_credentials": ["ANTHROPIC_API_KEY"]
                     },
                     "google": {
-                        "enabled": False,
-                        "implemented": False,
-                        "model": "gemini-pro",
+                        "enabled": True,
+                        "implemented": True,
+                        "model": "gemini-2.0-flash-exp",
                         "requires_credentials": ["GOOGLE_API_KEY"]
                     },
                     "ollama": {

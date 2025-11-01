@@ -125,6 +125,7 @@ buddyctl
 # Inside the shell:
 /help              # Show available commands
 /status            # Check auth and agent status
+/provider          # List or change LLM provider
 /clear             # Clear screen
 /exit              # Exit shell
 
@@ -141,6 +142,49 @@ Add type hints to @calculator.py
 Add a batch delete endpoint to @HypothesisController.kt
 # System automatically detects HypothesisService.kt and HypothesisRepository.kt
 # and modifies all related files in a single operation
+```
+
+### Managing LLM Providers
+
+BuddyCtl supports multiple LLM providers. You can switch between them using the `/provider` command:
+
+```bash
+# Inside the interactive shell:
+
+# List available providers
+/provider
+
+# Switch to a specific provider (persists across sessions)
+/provider google
+/provider stackspot
+/provider anthropic
+/provider openai
+/provider ollama
+```
+
+**Persistence:** When you change the provider using `/provider <name>`, your selection is automatically saved to `~/.buddyctl/config.json`. The next time you start BuddyCtl, it will use the provider you last selected instead of the default (StackSpot).
+
+**Currently Implemented Providers:**
+- **StackSpot AI** (default) - Requires: `STACKSPOT_CLIENT_ID`, `STACKSPOT_CLIENT_SECRET`, `STACKSPOT_REALM`
+- **Google Gemini** - Requires: `GOOGLE_API_KEY`
+
+**Planned Providers (not yet implemented):**
+- OpenAI (GPT-4)
+- Anthropic (Claude)
+- Ollama (local models)
+
+**Example:**
+```bash
+buddyctl> /provider google
+✓ LLM provider set to: Google Gemini
+
+# Now all your messages will use Google Gemini
+buddyctl> Hello, can you help me with Python?
+
+# Exit and restart - Google Gemini will still be the active provider
+buddyctl> /exit
+$ buddyctl
+# The CLI starts with Google Gemini as the active provider
 ```
 
 ## Using as a Library

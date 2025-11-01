@@ -38,6 +38,7 @@ prompt-toolkit = "^3.0.0"
 langchain = "^0.3.27"
 langchain-core = "^0.3.27"
 pydantic = "^2.0.0"
+langchain-google-genai = "2.1.12"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.4.0"

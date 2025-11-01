@@ -12,9 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Executors for different LLM providers."""
+"""Prompt loading and management."""
 
-from .native_tool_executor import NativeToolExecutor
-from .prompted_tool_executor import PromptedToolExecutor
+from .loader import PromptLoader
 
-__all__ = ["NativeToolExecutor", "PromptedToolExecutor"]
+__all__ = ["PromptLoader"]

@@ -41,15 +41,50 @@ def get_agent_status_display(config: "BuddyConfig") -> str:
         return "⚠️  Default Agent: Not configured"
 
 
+def get_provider_status_display(config: "BuddyConfig") -> str:
+    """Generate LLM provider status display."""
+    from ..core.provider_validator import ProviderValidator
+    from ..core.provider_registry import ProviderRegistry
+
+    status = config.get_config_status()
+    current_provider = status.get("current_provider", "stackspot")
+
+    # Get provider info
+    provider_info = ProviderRegistry.get_provider(current_provider)
+    if not provider_info:
+        return f"🔮 LLM Provider: {current_provider} (unknown)"
+
+    # Validate credentials
+    validator = ProviderValidator(config)
+    provider_status = validator.get_provider_status(current_provider)
+
+    if provider_status["implemented"]:
+        if provider_status["has_credentials"]:
+            return f"🔮 LLM Provider: {provider_info.display_name}"
+        else:
+            missing = ", ".join(provider_status["missing_credentials"])
+            return f"⚠️  LLM Provider: {provider_info.display_name} (missing: {missing})"
+    else:
+        return f"⚠️  LLM Provider: {provider_info.display_name} (not implemented)"
+
+
 def display_banner(auth: "StackSpotAuth" = None, config: Optional["BuddyConfig"] = None) -> None:
-    """Display the buddyctl banner with authentication and agent status to the console."""
+    """Display the buddyctl banner with authentication, provider and agent status to the console."""
     print(get_banner())
 
-    if auth:
+    # Get current provider to decide what to show
+    current_provider = config.get_current_provider() if config else "stackspot"
+
+    # Show authentication only for StackSpot provider
+    if auth and current_provider == "stackspot":
         print(get_auth_status_display(auth))
 
     if config:
-        print(get_agent_status_display(config))
+        print(get_provider_status_display(config))
+
+        # Show default agent only for StackSpot provider (other providers don't use agent_id)
+        if current_provider == "stackspot":
+            print(get_agent_status_display(config))
 
     if auth or config:
         print()  # Add extra line for spacing

@@ -47,11 +47,13 @@ class ProviderManager:
     def _register_adapters(self):
         """Registra todos os adapters disponíveis."""
         from .adapters.stackspot import StackSpotAdapter
+        from .adapters.google import GoogleAdapter
         # from .adapters.openai import OpenAIAdapter  # Futuro
         # from .adapters.anthropic import AnthropicAdapter  # Futuro
 
         self._adapters = {
             "stackspot": StackSpotAdapter(self.config, auth=self.auth),
+            "google": GoogleAdapter(self.config),
             # "openai": OpenAIAdapter(self.config),
             # "anthropic": AnthropicAdapter(self.config),
         }

@@ -29,7 +29,7 @@ def add_two_numbers(a: float, b: float) -> float:
 
 
 def subtract_two_numbers(a: float, b: float) -> float:
-    """Subtract second number from first number.
+    """Subtract two numbers.
 
     Args:
         a: First number
@@ -42,7 +42,7 @@ def subtract_two_numbers(a: float, b: float) -> float:
 
 
 def multiply_two_numbers(a: float, b: float) -> float:
-    """Multiply two numbers together.
+    """Multiply two numbers.
 
     Args:
         a: First number
@@ -55,18 +55,17 @@ def multiply_two_numbers(a: float, b: float) -> float:
 
 
 def divide_two_numbers(a: float, b: float) -> float:
-    """Divide first number by second number.
+    """Divide two numbers.
 
     Args:
-        a: First number (dividend)
-        b: Second number (divisor)
+        a: First number
+        b: Second number
 
     Returns:
         Quotient of a and b
-
-    Raises:
-        ValueError: If divisor is zero
     """
     if b == 0:
-        raise ValueError("Cannot divide by zero")
+        raise ValueError("Cannot divide by zero.")
     return a / b
+
+

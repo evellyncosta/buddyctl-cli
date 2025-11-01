@@ -7,7 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 ### Added
-- Features in development
+- Provider persistence: Selected LLM provider is now persisted across sessions
+- Enhanced `/provider` command with automatic persistence to `~/.buddyctl/config.json`
+- Automatic provider loading on CLI initialization
+- Documentation for provider management and persistence
 
 ## [0.0.1] - 2025-10-16
 ### Added
